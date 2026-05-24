@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // MVP admin allowlist. Replace/extend as needed.
+    function isAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email in [
+          "madamhoishop@gmail.com"
+        ];
+    }
+
+    function isValidPaymentMethod(value) {
+      return value in ["cash", "bank_transfer"];
+    }
+
+    function isValidOrderStatus(value) {
+      return value in [
+        "new",
+        "confirmed",
+        "preparing",
+        "out_for_delivery",
+        "completed",
+        "cancelled"
+      ];
+    }
+
+    function isValidOrderCreate() {
+      return request.resource.data.keys().hasOnly([
+        "orderRef",
+        "customer",
+        "quantities",
+        "calculated",
+        "paymentMethod",
+        "status",
+        "deliveryMessageSnapshot",
+        "pricingSnapshot",
+        "createdAt",
+        "updatedAt"
+      ]) &&
+      request.resource.data.orderRef is string &&
+      request.resource.data.customer is map &&
+      request.resource.data.customer.name is string &&
+      request.resource.data.customer.phone is string &&
+      request.resource.data.customer.deliveryLocation is string &&
+      request.resource.data.quantities is map &&
+      request.resource.data.quantities.regular is int &&
+      request.resource.data.quantities.small is int &&
+      request.resource.data.quantities.extraSauce is int &&
+      request.resource.data.quantities.opener is int &&
+      request.resource.data.quantities.regular >= 0 &&
+      request.resource.data.quantities.small >= 0 &&
+      request.resource.data.quantities.extraSauce >= 0 &&
+      request.resource.data.quantities.opener >= 0 &&
+      request.resource.data.calculated is map &&
+      request.resource.data.calculated.hoiGramsDeducted is int &&
+      request.resource.data.calculated.includedSauce is int &&
+      request.resource.data.calculated.extraSauce is int &&
+      request.resource.data.calculated.totalSauce is int &&
+      request.resource.data.calculated.subtotal is int &&
+      request.resource.data.calculated.total is int &&
+      request.resource.data.calculated.hoiGramsDeducted >= 0 &&
+      request.resource.data.calculated.total >= 0 &&
+      request.resource.data.deliveryMessageSnapshot is map &&
+      request.resource.data.deliveryMessageSnapshot.th is string &&
+      request.resource.data.deliveryMessageSnapshot.en is string &&
+      request.resource.data.pricingSnapshot is map &&
+      request.resource.data.pricingSnapshot.regularPrice is int &&
+      request.resource.data.pricingSnapshot.smallPrice is int &&
+      request.resource.data.pricingSnapshot.extraSaucePrice is int &&
+      request.resource.data.pricingSnapshot.openerPrice is int &&
+      request.resource.data.status == "new" &&
+      isValidPaymentMethod(request.resource.data.paymentMethod);
+    }
+
+    // Allows customer checkout transaction to deduct stock.
+    // This cannot fully prevent abuse in client-only architecture.
+    // For stronger security, move checkout + stock deduction to trusted backend.
+    function isConstrainedStockDeduction() {
+      return request.resource.data.keys().hasOnly([
+        "availableHoiGrams",
+        "openerStock",
+        "updatedAt"
+      ]) &&
+      request.resource.data.availableHoiGrams is int &&
+      request.resource.data.openerStock is int &&
+      request.resource.data.availableHoiGrams >= 0 &&
+      request.resource.data.openerStock >= 0 &&
+      request.resource.data.availableHoiGrams <= resource.data.availableHoiGrams &&
+      request.resource.data.openerStock <= resource.data.openerStock;
+    }
+
+    match /settings/main {
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /stock/today {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin() || isConstrainedStockDeduction();
+      allow delete: if false;
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAdmin();
+      allow create: if isValidOrderCreate();
+      allow update: if isAdmin() &&
+        request.resource.data.keys().hasAll([
+          "orderRef",
+          "customer",
+          "quantities",
+          "calculated",
+          "paymentMethod",
+          "status",
+          "deliveryMessageSnapshot",
+          "pricingSnapshot",
+          "createdAt",
+          "updatedAt"
+        ]) &&
+        isValidOrderStatus(request.resource.data.status) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+  }
+}
