@@ -10,3 +10,13 @@ export const formatDateTime = (value: unknown): string => {
 
   return String(value);
 };
+
+export const toDateOrNull = (value: unknown): Date | null => {
+  if (!value) {
+    return null;
+  }
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  return null;
+};

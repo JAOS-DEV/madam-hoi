@@ -1,14 +1,44 @@
+import { useMemo, useState } from "react";
 import { Card } from "../../components/ui/Card";
+import { Button } from "../../components/ui/Button";
+import type { Translation } from "../../i18n";
 import type { OrderDoc, StockDoc } from "../../types/firestore";
+import { toDateOrNull } from "../../utils/dates";
 import { formatTHB } from "../../utils/money";
 
 interface DailySummaryProps {
   orders: Array<OrderDoc & { id: string }>;
   stock: StockDoc;
+  t: Translation;
 }
 
-export function DailySummary({ orders, stock }: DailySummaryProps): JSX.Element {
-  const validOrders = orders.filter((order) => order.status !== "cancelled");
+export function DailySummary({ orders, stock, t }: DailySummaryProps): JSX.Element {
+  const [range, setRange] = useState<"day" | "week" | "month">("day");
+  const periodStart = useMemo(() => {
+    const now = new Date();
+    const base = new Date(now);
+    if (range === "day") {
+      base.setHours(0, 0, 0, 0);
+      return base;
+    }
+    if (range === "week") {
+      base.setDate(base.getDate() - 6);
+      base.setHours(0, 0, 0, 0);
+      return base;
+    }
+    base.setDate(1);
+    base.setHours(0, 0, 0, 0);
+    return base;
+  }, [range]);
+
+  const inRangeOrders = orders.filter((order) => {
+    const createdDate = toDateOrNull(order.createdAt);
+    if (!createdDate) {
+      return false;
+    }
+    return createdDate >= periodStart && order.archivedAt === undefined;
+  });
+  const validOrders = inRangeOrders.filter((order) => order.status !== "cancelled");
   const revenue = validOrders.reduce((sum, order) => sum + order.calculated.total, 0);
   const regularSold = validOrders.reduce((sum, order) => sum + order.quantities.regular, 0);
   const smallSold = validOrders.reduce((sum, order) => sum + order.quantities.small, 0);
@@ -22,17 +52,28 @@ export function DailySummary({ orders, stock }: DailySummaryProps): JSX.Element 
   }, {});
 
   return (
-    <Card title="Daily summary">
+    <Card title={t.adminDailySummaryTitle}>
+      <div className="mb-3 flex gap-2">
+        <Button variant={range === "day" ? "primary" : "secondary"} onClick={() => setRange("day")}>
+          {t.statsRangeDay}
+        </Button>
+        <Button variant={range === "week" ? "primary" : "secondary"} onClick={() => setRange("week")}>
+          {t.statsRangeWeek}
+        </Button>
+        <Button variant={range === "month" ? "primary" : "secondary"} onClick={() => setRange("month")}>
+          {t.statsRangeMonth}
+        </Button>
+      </div>
       <div className="grid gap-1 text-sm">
-        <p>Orders today: {orders.length}</p>
-        <p>Revenue today: {formatTHB(revenue)} THB</p>
-        <p>Regular sold: {regularSold}</p>
-        <p>Small sold: {smallSold}</p>
-        <p>Extra sauce sold: {sauceSold}</p>
-        <p>Openers sold: {openerSold}</p>
-        <p>Hoi grams used: {hoiUsed}</p>
-        <p>Hoi kg remaining: {(stock.availableHoiGrams / 1000).toFixed(1)}</p>
-        <p>Orders by status: {JSON.stringify(statusCount)}</p>
+        <p>{t.ordersTodayLabel}: {inRangeOrders.length}</p>
+        <p>{t.revenueTodayLabel}: {formatTHB(revenue)} THB</p>
+        <p>{t.regularSoldLabel}: {regularSold}</p>
+        <p>{t.smallSoldLabel}: {smallSold}</p>
+        <p>{t.extraSauceSoldLabel}: {sauceSold}</p>
+        <p>{t.openersSoldLabel}: {openerSold}</p>
+        <p>{t.hoiGramsUsedLabel}: {hoiUsed}</p>
+        <p>{t.hoiKgRemainingLabel}: {(stock.availableHoiGrams / 1000).toFixed(1)}</p>
+        <p>{t.ordersByStatusLabel}: {JSON.stringify(statusCount)}</p>
       </div>
     </Card>
   );

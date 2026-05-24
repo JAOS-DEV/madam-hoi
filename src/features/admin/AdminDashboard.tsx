@@ -38,12 +38,12 @@ export function AdminDashboard({
     <main className="mx-auto max-w-5xl space-y-4 p-4">
       <header className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm">
         <div>
-          <h1 className="text-xl font-bold text-brand-red">Madam Hoi Admin</h1>
-          <p className="text-sm text-slate-600">Manage ordering, stock, and daily operations.</p>
+          <h1 className="text-xl font-bold text-brand-red">{t.adminTitle}</h1>
+          <p className="text-sm text-slate-600">{t.adminSubtitle}</p>
         </div>
         <div className="flex items-center gap-2">
           <Link to="/">
-            <Button variant="secondary">Back to ordering</Button>
+            <Button variant="secondary">{t.backToOrdering}</Button>
           </Link>
           <Button variant="secondary" onClick={() => void logoutAdmin()}>
             {t.signOut}
@@ -52,14 +52,14 @@ export function AdminDashboard({
       </header>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <SettingsPanel settings={settings} />
-        <StockPanel stock={stock} />
-        <ProductSettingsPanel settings={settings} />
-        <BankDetailsPanel settings={settings} />
+        <SettingsPanel settings={settings} t={t} />
+        <StockPanel stock={stock} t={t} />
+        <ProductSettingsPanel settings={settings} t={t} />
+        <BankDetailsPanel settings={settings} t={t} />
       </div>
 
-      <DailySummary orders={orders} stock={stock} />
-      <OrdersPanel orders={orders} />
+      <DailySummary orders={orders} stock={stock} t={t} />
+      <OrdersPanel orders={orders} t={t} />
     </main>
   );
 }

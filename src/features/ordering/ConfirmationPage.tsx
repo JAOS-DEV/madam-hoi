@@ -1,6 +1,7 @@
 import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
+import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { db } from "../../lib/firebase";
 import type { Language } from "../../i18n";
@@ -83,6 +84,9 @@ export function ConfirmationPage({ language, settings }: ConfirmationPageProps):
           <p>{language === "th" ? settings.bankTransfer.noteTh : settings.bankTransfer.noteEn}</p>
         </Card>
       ) : null}
+      <Link to="/">
+        <Button fullWidth>{language === "th" ? "สั่งอีกครั้ง" : "Order again"}</Button>
+      </Link>
     </main>
   );
 }

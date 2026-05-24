@@ -105,4 +105,5 @@ export interface OrderDoc {
   updatedAt: unknown;
   cancelledAt?: unknown;
   stockRestored?: boolean;
+  archivedAt?: unknown;
 }

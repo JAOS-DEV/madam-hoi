@@ -3,14 +3,16 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
+import type { Translation } from "../../i18n";
 import type { MainSettingsDoc } from "../../types/firestore";
 import { updateOrderingStatus, updateSettingsPatch } from "./adminService";
 
 interface SettingsPanelProps {
   settings: MainSettingsDoc;
+  t: Translation;
 }
 
-export function SettingsPanel({ settings }: SettingsPanelProps): JSX.Element {
+export function SettingsPanel({ settings, t }: SettingsPanelProps): JSX.Element {
   const [announcement, setAnnouncement] = useState(settings.announcement);
   const [template, setTemplate] = useState(settings.deliveryMessage.template);
   const [startTime, setStartTime] = useState(settings.deliveryMessage.startTime ?? "19:00");
@@ -32,45 +34,45 @@ export function SettingsPanel({ settings }: SettingsPanelProps): JSX.Element {
   };
 
   return (
-    <Card title="Ordering and delivery message">
+    <Card title={t.adminSettingsPanelTitle}>
       <div className="space-y-3">
         <div className="flex gap-2">
           <Button
             variant={settings.orderingOpen ? "primary" : "secondary"}
             onClick={() => updateOrderingStatus(true)}
           >
-            Open ordering
+            {t.openOrdering}
           </Button>
           <Button
             variant={!settings.orderingOpen ? "danger" : "secondary"}
             onClick={() => updateOrderingStatus(false)}
           >
-            Close ordering
+            {t.closeOrdering}
           </Button>
         </div>
         <Input
-          label="Announcement"
+          label={t.announcementLabel}
           value={announcement}
           onChange={(event) => setAnnouncement(event.target.value)}
         />
         <Select
-          label="Delivery message template"
+          label={t.deliveryTemplateLabel}
           value={template}
           onChange={(event) => setTemplate(event.target.value as MainSettingsDoc["deliveryMessage"]["template"])}
           options={[
-            { value: "estimated_range", label: "Estimated delivery today: start-end" },
-            { value: "starts_after", label: "Delivery starts after start" },
-            { value: "varies", label: "Estimated delivery time varies" },
-            { value: "custom", label: "Custom message" },
+            { value: "estimated_range", label: t.templateEstimatedRange },
+            { value: "starts_after", label: t.templateStartsAfter },
+            { value: "varies", label: t.templateVaries },
+            { value: "custom", label: t.templateCustom },
           ]}
         />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Input label="Start time" value={startTime} onChange={(event) => setStartTime(event.target.value)} />
-          <Input label="End time" value={endTime} onChange={(event) => setEndTime(event.target.value)} />
+          <Input label={t.startTimeLabel} value={startTime} onChange={(event) => setStartTime(event.target.value)} />
+          <Input label={t.endTimeLabel} value={endTime} onChange={(event) => setEndTime(event.target.value)} />
         </div>
-        <Input label="Custom Thai message" value={customTh} onChange={(event) => setCustomTh(event.target.value)} />
-        <Input label="Custom English message" value={customEn} onChange={(event) => setCustomEn(event.target.value)} />
-        <Button onClick={handleSave}>Save settings</Button>
+        <Input label={t.customThaiMessage} value={customTh} onChange={(event) => setCustomTh(event.target.value)} />
+        <Input label={t.customEnglishMessage} value={customEn} onChange={(event) => setCustomEn(event.target.value)} />
+        <Button onClick={handleSave}>{t.saveSettings}</Button>
       </div>
     </Card>
   );

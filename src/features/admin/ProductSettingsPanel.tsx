@@ -2,14 +2,16 @@ import { useState } from "react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
+import type { Translation } from "../../i18n";
 import type { MainSettingsDoc } from "../../types/firestore";
 import { updateSettingsPatch } from "./adminService";
 
 interface ProductSettingsPanelProps {
   settings: MainSettingsDoc;
+  t: Translation;
 }
 
-export function ProductSettingsPanel({ settings }: ProductSettingsPanelProps): JSX.Element {
+export function ProductSettingsPanel({ settings, t }: ProductSettingsPanelProps): JSX.Element {
   const [state, setState] = useState(settings.productSettings);
 
   const save = async (): Promise<void> => {
@@ -17,10 +19,10 @@ export function ProductSettingsPanel({ settings }: ProductSettingsPanelProps): J
   };
 
   return (
-    <Card title="Product settings">
+    <Card title={t.adminProductTitle}>
       <div className="space-y-3">
         <Input
-          label="Regular price"
+          label={t.regularPriceLabel}
           type="number"
           value={state.regular.price}
           onChange={(event) =>
@@ -31,7 +33,7 @@ export function ProductSettingsPanel({ settings }: ProductSettingsPanelProps): J
           }
         />
         <Input
-          label="Regular deduction grams"
+          label={t.regularDeductionLabel}
           type="number"
           value={state.regular.deductionGrams}
           onChange={(event) =>
@@ -42,7 +44,7 @@ export function ProductSettingsPanel({ settings }: ProductSettingsPanelProps): J
           }
         />
         <Input
-          label="Small price"
+          label={t.smallPriceLabel}
           type="number"
           value={state.small.price}
           onChange={(event) =>
@@ -50,7 +52,7 @@ export function ProductSettingsPanel({ settings }: ProductSettingsPanelProps): J
           }
         />
         <Input
-          label="Small deduction grams"
+          label={t.smallDeductionLabel}
           type="number"
           value={state.small.deductionGrams}
           onChange={(event) =>
@@ -61,7 +63,7 @@ export function ProductSettingsPanel({ settings }: ProductSettingsPanelProps): J
           }
         />
         <Input
-          label="Extra sauce price"
+          label={t.extraSaucePriceLabel}
           type="number"
           value={state.extraSauce.price}
           onChange={(event) =>
@@ -72,14 +74,14 @@ export function ProductSettingsPanel({ settings }: ProductSettingsPanelProps): J
           }
         />
         <Input
-          label="Hoi opener price"
+          label={t.openerPriceLabel}
           type="number"
           value={state.opener.price}
           onChange={(event) =>
             setState((prev) => ({ ...prev, opener: { ...prev.opener, price: Number(event.target.value) } }))
           }
         />
-        <Button onClick={save}>Save products</Button>
+        <Button onClick={save}>{t.saveProducts}</Button>
       </div>
     </Card>
   );
