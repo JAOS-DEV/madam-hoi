@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import type { Language } from "../../i18n";
 import { translations } from "../../i18n";
@@ -40,9 +41,14 @@ export function AdminDashboard({
           <h1 className="text-xl font-bold text-brand-red">Madam Hoi Admin</h1>
           <p className="text-sm text-slate-600">Manage ordering, stock, and daily operations.</p>
         </div>
-        <Button variant="secondary" onClick={() => void logoutAdmin()}>
-          {t.signOut}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link to="/">
+            <Button variant="secondary">Back to ordering</Button>
+          </Link>
+          <Button variant="secondary" onClick={() => void logoutAdmin()}>
+            {t.signOut}
+          </Button>
+        </div>
       </header>
 
       <div className="grid gap-4 lg:grid-cols-2">
