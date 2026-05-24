@@ -27,6 +27,7 @@ export function OrderPage({
 }: OrderPageProps): JSX.Element {
   const navigate = useNavigate();
   const t = translations[language];
+  const assetBase = import.meta.env.BASE_URL;
 
   const maxAddable = useMemo(() => {
     if (!settings || !stock) {
@@ -75,7 +76,7 @@ export function OrderPage({
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <img
-              src="/branding/logo.png"
+              src={`${assetBase}branding/logo.png`}
               alt="Madam Hoi logo"
               className="h-20 w-20 rounded-xl object-cover shadow-sm sm:h-24 sm:w-24"
             />
