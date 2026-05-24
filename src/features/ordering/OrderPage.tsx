@@ -1,13 +1,11 @@
-import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert } from "../../components/ui/Alert";
-import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import type { Language } from "../../i18n";
 import { translations } from "../../i18n";
 import type { MainSettingsDoc, StockDoc } from "../../types/firestore";
-import { gramsToKgLabel, createEmptyQuantities, getMaxAddable } from "./stockUtils";
+import { gramsToKgLabel } from "./stockUtils";
 import { OrderForm } from "./OrderForm";
 
 interface OrderPageProps {
@@ -28,17 +26,6 @@ export function OrderPage({
   const navigate = useNavigate();
   const t = translations[language];
   const assetBase = import.meta.env.BASE_URL;
-
-  const maxAddable = useMemo(() => {
-    if (!settings || !stock) {
-      return { regular: 0, small: 0 };
-    }
-    return getMaxAddable(
-      stock.availableHoiGrams,
-      createEmptyQuantities(),
-      settings.productSettings,
-    );
-  }, [settings, stock]);
 
   if (isInitialLoading) {
     return <p className="mx-auto max-w-2xl p-4">Loading...</p>;
@@ -103,10 +90,6 @@ export function OrderPage({
           {t.todayStock}: <strong>{gramsToKgLabel(stock.availableHoiGrams)}kg</strong>
         </p>
         <p className="text-sm text-slate-600">{t.stockAutoUpdates}</p>
-        <div className="mt-2 flex gap-2">
-          <Badge>{t.regular}: {maxAddable.regular}</Badge>
-          <Badge>{t.small}: {maxAddable.small}</Badge>
-        </div>
       </Card>
 
       {!settings.orderingOpen ? <Alert tone="warning">{t.orderingClosed}</Alert> : null}

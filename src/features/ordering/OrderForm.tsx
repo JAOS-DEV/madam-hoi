@@ -2,13 +2,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Alert } from "../../components/ui/Alert";
+import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import type { Translation } from "../../i18n";
 import type { MainSettingsDoc, PaymentMethod, StockDoc } from "../../types/firestore";
-import { calculateOrderSummary, createEmptyQuantities, getMaxAddable } from "./stockUtils";
+import { calculateOrderSummary, createEmptyQuantities, getMaxAddable, gramsToKgLabel } from "./stockUtils";
 import { QuantityStepper } from "./QuantityStepper";
 import { orderSchema, type OrderSchemaInput } from "./orderSchema";
 import { submitOrder } from "./orderService";
@@ -45,6 +46,7 @@ export function OrderForm({ settings, stock, t, onOrderSuccess }: OrderFormProps
     () => getMaxAddable(stock.availableHoiGrams, quantities, settings.productSettings),
     [stock.availableHoiGrams, quantities, settings.productSettings],
   );
+  const remainingHoiGrams = Math.max(0, stock.availableHoiGrams - summary.hoiGramsDeducted);
   const remainingOpeners = stock.openerStock - quantities.opener;
 
   const increment = (key: keyof typeof quantities): void => {
@@ -92,10 +94,23 @@ export function OrderForm({ settings, stock, t, onOrderSuccess }: OrderFormProps
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
       <Card title={t.quantity}>
+        <div className="mb-3 space-y-2">
+          <p className="text-sm text-slate-700">
+            {t.todayStock}: <strong>{gramsToKgLabel(remainingHoiGrams)}kg</strong>
+          </p>
+          <p className="text-xs text-slate-600">{t.canStillAdd}</p>
+          <div className="flex gap-2">
+            <Badge>
+              {t.regular}: {maxAddable.regular}
+            </Badge>
+            <Badge>
+              {t.small}: {maxAddable.small}
+            </Badge>
+          </div>
+        </div>
         <div className="space-y-2">
           <QuantityStepper
             label={`${t.regularHoi} (${settings.productSettings.regular.price} THB)`}
-            subtitle={settings.productSettings.regular.sizeLabel}
             value={quantities.regular}
             canIncrease={settings.productSettings.regular.active && maxAddable.regular > 0}
             canDecrease={quantities.regular > 0}
@@ -104,7 +119,6 @@ export function OrderForm({ settings, stock, t, onOrderSuccess }: OrderFormProps
           />
           <QuantityStepper
             label={`${t.smallHoi} (${settings.productSettings.small.price} THB)`}
-            subtitle={settings.productSettings.small.sizeLabel}
             value={quantities.small}
             canIncrease={settings.productSettings.small.active && maxAddable.small > 0}
             canDecrease={quantities.small > 0}

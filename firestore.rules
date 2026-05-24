@@ -80,12 +80,7 @@ service cloud.firestore {
     // This cannot fully prevent abuse in client-only architecture.
     // For stronger security, move checkout + stock deduction to trusted backend.
     function isConstrainedStockDeduction() {
-      return request.resource.data.keys().hasOnly([
-        "availableHoiGrams",
-        "openerStock",
-        "updatedAt"
-      ]) &&
-      request.resource.data.availableHoiGrams is int &&
+      return request.resource.data.availableHoiGrams is int &&
       request.resource.data.openerStock is int &&
       request.resource.data.availableHoiGrams >= 0 &&
       request.resource.data.openerStock >= 0 &&
@@ -107,7 +102,8 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow read: if isAdmin();
+      allow get: if true;
+      allow list: if isAdmin();
       allow create: if isValidOrderCreate();
       allow update: if isAdmin() &&
         request.resource.data.keys().hasAll([
