@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
+import { MapPinPicker } from "../../components/ui/MapPinPicker";
 import { Select } from "../../components/ui/Select";
 import type { Translation } from "../../i18n";
 import type { MainSettingsDoc } from "../../types/firestore";
@@ -26,6 +27,7 @@ export function SettingsPanel({ settings, t }: SettingsPanelProps): JSX.Element 
   const [dispatchLng, setDispatchLng] = useState(
     settings.dispatchPoint?.lng !== undefined ? String(settings.dispatchPoint.lng) : "",
   );
+  const [isDispatchPickerOpen, setIsDispatchPickerOpen] = useState(false);
 
   const handleSave = async (): Promise<void> => {
     await updateSettingsPatch({
@@ -101,9 +103,29 @@ export function SettingsPanel({ settings, t }: SettingsPanelProps): JSX.Element 
             onChange={(event) => setDispatchLng(event.target.value)}
           />
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setIsDispatchPickerOpen(true)}>
+            {t.pickPinOnMap}
+          </Button>
+          <span className="text-xs text-slate-600">
+            {dispatchLat && dispatchLng ? `Lat ${dispatchLat}, Lng ${dispatchLng}` : ""}
+          </span>
+        </div>
         <p className="text-xs text-slate-600">{t.routingSettingsHint}</p>
         <Button onClick={handleSave}>{t.saveSettings}</Button>
       </div>
+      <MapPinPicker
+        isOpen={isDispatchPickerOpen}
+        title={t.dispatchStartPointLabel}
+        initialLat={dispatchLat.trim() ? Number(dispatchLat) : undefined}
+        initialLng={dispatchLng.trim() ? Number(dispatchLng) : undefined}
+        onClose={() => setIsDispatchPickerOpen(false)}
+        onConfirm={(lat, lng) => {
+          setDispatchLat(lat.toFixed(6));
+          setDispatchLng(lng.toFixed(6));
+          setIsDispatchPickerOpen(false);
+        }}
+      />
     </Card>
   );
 }

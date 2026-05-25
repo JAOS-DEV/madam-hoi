@@ -123,7 +123,11 @@ export const en: Translation = {
   dispatchLngLabel: "Dispatch longitude (optional)",
   routingSettingsHint: "Set your dispatch base once, then open optimized route from filtered orders.",
   openRouteInMaps: "Open route in Google Maps",
+  pickPinOnMap: "Pick pin on map",
   routeNoDispatchPoint: "Please set dispatch start point in admin settings first.",
   routeNoOrdersForRoute: "No valid delivery stops in current filtered list.",
   routeStopsLimitedNote: "Google Maps route opens up to first 10 stops from current filters.",
+  routePreviewTitle: "Route preview (first stops)",
+  routePreviewOrigin: "Origin",
+  routePreviewStop: "Stop",
 };

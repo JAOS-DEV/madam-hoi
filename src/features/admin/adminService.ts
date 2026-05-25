@@ -80,3 +80,13 @@ export async function archiveOrdersByStatuses(statuses: OrderStatus[]): Promise<
   await batch.commit();
   return targets.length;
 }
+
+export async function updateOrderLocation(
+  orderId: string,
+  location: { lat: number; lng: number },
+): Promise<void> {
+  await updateDoc(doc(db, "orders", orderId), {
+    "customer.location": location,
+    updatedAt: serverTimestamp(),
+  });
+}

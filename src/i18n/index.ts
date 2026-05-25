@@ -124,9 +124,13 @@ export interface Translation {
   dispatchLngLabel: string;
   routingSettingsHint: string;
   openRouteInMaps: string;
+  pickPinOnMap: string;
   routeNoDispatchPoint: string;
   routeNoOrdersForRoute: string;
   routeStopsLimitedNote: string;
+  routePreviewTitle: string;
+  routePreviewOrigin: string;
+  routePreviewStop: string;
 }
 
 export const translations: Record<Language, Translation> = {

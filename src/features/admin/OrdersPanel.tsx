@@ -2,12 +2,18 @@ import { useMemo, useState } from "react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
+import { MapPinPicker } from "../../components/ui/MapPinPicker";
 import { Select } from "../../components/ui/Select";
 import type { Translation } from "../../i18n";
 import type { MainSettingsDoc, OrderDoc, OrderStatus } from "../../types/firestore";
 import { formatDateTime, toDateOrNull } from "../../utils/dates";
 import { formatTHB } from "../../utils/money";
-import { archiveOrdersByStatuses, cancelOrderByAdmin, setOrderStatus } from "./adminService";
+import {
+  archiveOrdersByStatuses,
+  cancelOrderByAdmin,
+  setOrderStatus,
+  updateOrderLocation,
+} from "./adminService";
 
 interface OrdersPanelProps {
   orders: Array<OrderDoc & { id: string }>;
@@ -31,6 +37,7 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
   const [paymentFilter, setPaymentFilter] = useState<"all" | "cash" | "bank_transfer">("all");
   const [dateRange, setDateRange] = useState<"all" | "day" | "week" | "month">("all");
+  const [pickingOrderId, setPickingOrderId] = useState<string | null>(null);
   const statusLabels: Record<OrderStatus, string> = {
     new: t.statusNew,
     confirmed: t.statusConfirmed,
@@ -74,24 +81,41 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
     });
   }, [dateRange, orders, paymentFilter, search, showArchived, statusFilter]);
 
+  const dispatchAddress = settings.dispatchPoint?.address?.trim() ?? "";
+  const dispatchCoords =
+    settings.dispatchPoint?.lat !== undefined && settings.dispatchPoint?.lng !== undefined
+      ? `${settings.dispatchPoint.lat},${settings.dispatchPoint.lng}`
+      : null;
+  const routeStops = useMemo(
+    () =>
+      visibleOrders
+        .filter((order) => order.status !== "cancelled")
+        .map((order) => ({
+          orderRef: order.orderRef,
+          value: order.customer.location
+            ? `${order.customer.location.lat},${order.customer.location.lng}`
+            : order.customer.deliveryLocation.trim(),
+          label: order.customer.deliveryLocation,
+          hasPin: Boolean(order.customer.location),
+        }))
+        .filter((entry) => entry.value)
+        .slice(0, 10),
+    [visibleOrders],
+  );
+
   const openRouteInMaps = (): void => {
-    const dispatchAddress = settings.dispatchPoint?.address?.trim();
-    if (!dispatchAddress) {
+    const originValue = dispatchCoords ?? dispatchAddress;
+    if (!originValue.trim()) {
       window.alert(t.routeNoDispatchPoint);
       return;
     }
-    const stops = visibleOrders
-      .filter((order) => order.status !== "cancelled")
-      .map((order) => order.customer.deliveryLocation.trim())
-      .filter(Boolean);
-    if (stops.length === 0) {
+    if (routeStops.length === 0) {
       window.alert(t.routeNoOrdersForRoute);
       return;
     }
-    const limitedStops = stops.slice(0, 10);
-    const destination = limitedStops[limitedStops.length - 1];
-    const waypoints = limitedStops.slice(0, -1);
-    const encodedOrigin = encodeURIComponent(dispatchAddress);
+    const destination = routeStops[routeStops.length - 1].value;
+    const waypoints = routeStops.slice(0, -1).map((item) => item.value);
+    const encodedOrigin = encodeURIComponent(originValue);
     const encodedDestination = encodeURIComponent(destination);
     const waypointParam =
       waypoints.length > 0
@@ -183,6 +207,24 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
         </label>
       </div>
       <p className="mb-3 text-xs text-slate-600">{t.routeStopsLimitedNote}</p>
+      <div className="mb-3 rounded-lg border border-brand-gold/30 bg-white/70 p-3">
+        <p className="text-sm font-semibold text-brand-redDark">{t.routePreviewTitle}</p>
+        <p className="mt-1 text-xs text-slate-600">
+          {t.routePreviewOrigin}: {dispatchCoords ?? dispatchAddress || "-"}
+        </p>
+        <div className="mt-2 space-y-1 text-xs text-slate-700">
+          {routeStops.length === 0 ? (
+            <p>{t.routeNoOrdersForRoute}</p>
+          ) : (
+            routeStops.map((stop, index) => (
+              <p key={`${stop.orderRef}-${index}`}>
+                {t.routePreviewStop} {index + 1}: {stop.label} ({stop.orderRef}
+                {stop.hasPin ? ", pin" : ""})
+              </p>
+            ))
+          )}
+        </div>
+      </div>
       <div className="space-y-4">
         {visibleOrders.map((order) => (
           <article key={order.id} className="rounded-lg border border-slate-200 p-3">
@@ -191,6 +233,11 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
             <p>{order.customer.name}</p>
             <p>{order.customer.phone}</p>
             <p>{order.customer.deliveryLocation}</p>
+            {order.customer.location ? (
+              <p className="text-xs text-slate-500">
+                Lat {order.customer.location.lat.toFixed(6)}, Lng {order.customer.location.lng.toFixed(6)}
+              </p>
+            ) : null}
             <p>
               {t.total}: {formatTHB(order.calculated.total)} THB
             </p>
@@ -221,10 +268,34 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
             >
               {t.cancelOrderLabel}
             </Button>
+            <Button variant="secondary" onClick={() => setPickingOrderId(order.id)}>
+              {t.pickPinOnMap}
+            </Button>
           </article>
         ))}
         {visibleOrders.length === 0 ? <p className="text-sm text-slate-500">{t.noOrdersInView}</p> : null}
       </div>
+      <MapPinPicker
+        isOpen={pickingOrderId !== null}
+        title={t.pickPinOnMap}
+        initialLat={
+          pickingOrderId
+            ? visibleOrders.find((order) => order.id === pickingOrderId)?.customer.location?.lat
+            : undefined
+        }
+        initialLng={
+          pickingOrderId
+            ? visibleOrders.find((order) => order.id === pickingOrderId)?.customer.location?.lng
+            : undefined
+        }
+        onClose={() => setPickingOrderId(null)}
+        onConfirm={(lat, lng) => {
+          if (pickingOrderId) {
+            void updateOrderLocation(pickingOrderId, { lat, lng });
+          }
+          setPickingOrderId(null);
+        }}
+      />
     </Card>
   );
 }

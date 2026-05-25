@@ -79,6 +79,10 @@ export interface OrderCustomer {
   email?: string;
   deliveryLocation: string;
   notes?: string;
+  location?: {
+    lat: number;
+    lng: number;
+  };
 }
 
 export type OrderQuantities = Record<string, number>;
