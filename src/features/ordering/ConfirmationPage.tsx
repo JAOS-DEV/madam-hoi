@@ -65,6 +65,13 @@ export function ConfirmationPage({ language, settings }: ConfirmationPageProps):
         <p>
           {t.total}: {formatTHB(order.calculated.total)} THB
         </p>
+        <div className="mt-2 space-y-1 text-sm">
+          {order.itemSnapshot.map((item) => (
+            <p key={item.productId}>
+              {(language === "th" ? item.thaiLabel : item.label)} x {item.quantity}
+            </p>
+          ))}
+        </div>
         <p>
           {t.includedSauce}: {order.calculated.includedSauce}
         </p>

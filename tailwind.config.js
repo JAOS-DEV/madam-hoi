@@ -6,8 +6,11 @@ export default {
       colors: {
         brand: {
           red: "#b91c1c",
-          gold: "#ca8a04",
-          green: "#166534",
+          redDark: "#7f1d1d",
+          gold: "#d4a017",
+          cream: "#fff7e6",
+          blush: "#ffe4d6",
+          charcoal: "#2b2b2b",
         },
       },
     },

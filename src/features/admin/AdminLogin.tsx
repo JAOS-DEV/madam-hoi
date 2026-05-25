@@ -7,9 +7,10 @@ import { loginAdmin } from "./adminService";
 
 interface AdminLoginProps {
   t: Translation;
+  onToggleLanguage: () => void;
 }
 
-export function AdminLogin({ t }: AdminLoginProps): JSX.Element {
+export function AdminLogin({ t, onToggleLanguage }: AdminLoginProps): JSX.Element {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -32,6 +33,11 @@ export function AdminLogin({ t }: AdminLoginProps): JSX.Element {
     <main className="mx-auto max-w-md p-4">
       <Card title={t.adminLogin}>
         <div className="space-y-3">
+          <div className="flex justify-end">
+            <Button variant="secondary" onClick={onToggleLanguage}>
+              {t.languageToggle}
+            </Button>
+          </div>
           <Input label={t.adminEmail} value={email} onChange={(event) => setEmail(event.target.value)} />
           <Input
             label={t.adminPassword}

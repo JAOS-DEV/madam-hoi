@@ -111,4 +111,11 @@ export const th: Translation = {
   statsRangeDay: "รายวัน",
   statsRangeWeek: "รายสัปดาห์",
   statsRangeMonth: "รายเดือน",
+  statsRangeAll: "ทั้งหมด",
+  orderFiltersTitle: "ตัวกรอง",
+  orderSearchLabel: "ค้นหาออเดอร์",
+  searchOrdersPlaceholder: "ค้นหาจากเลขออเดอร์ ชื่อ เบอร์โทร หรือสถานที่จัดส่ง",
+  allStatusesLabel: "ทุกสถานะ",
+  paymentFilterLabel: "การชำระเงิน",
+  allPaymentsLabel: "ทุกวิธีชำระเงิน",
 };

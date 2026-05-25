@@ -111,4 +111,11 @@ export const en: Translation = {
   statsRangeDay: "Day",
   statsRangeWeek: "Week",
   statsRangeMonth: "Month",
+  statsRangeAll: "All",
+  orderFiltersTitle: "Filters",
+  orderSearchLabel: "Search orders",
+  searchOrdersPlaceholder: "Search by order ref, name, phone, location",
+  allStatusesLabel: "All statuses",
+  paymentFilterLabel: "Payment",
+  allPaymentsLabel: "All payments",
 };

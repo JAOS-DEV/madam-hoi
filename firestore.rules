@@ -37,6 +37,7 @@ service cloud.firestore {
         "paymentMethod",
         "status",
         "deliveryMessageSnapshot",
+        "itemSnapshot",
         "pricingSnapshot",
         "createdAt",
         "updatedAt"
@@ -47,14 +48,6 @@ service cloud.firestore {
       request.resource.data.customer.phone is string &&
       request.resource.data.customer.deliveryLocation is string &&
       request.resource.data.quantities is map &&
-      request.resource.data.quantities.regular is int &&
-      request.resource.data.quantities.small is int &&
-      request.resource.data.quantities.extraSauce is int &&
-      request.resource.data.quantities.opener is int &&
-      request.resource.data.quantities.regular >= 0 &&
-      request.resource.data.quantities.small >= 0 &&
-      request.resource.data.quantities.extraSauce >= 0 &&
-      request.resource.data.quantities.opener >= 0 &&
       request.resource.data.calculated is map &&
       request.resource.data.calculated.hoiGramsDeducted is int &&
       request.resource.data.calculated.includedSauce is int &&
@@ -67,11 +60,8 @@ service cloud.firestore {
       request.resource.data.deliveryMessageSnapshot is map &&
       request.resource.data.deliveryMessageSnapshot.th is string &&
       request.resource.data.deliveryMessageSnapshot.en is string &&
+      request.resource.data.itemSnapshot is list &&
       request.resource.data.pricingSnapshot is map &&
-      request.resource.data.pricingSnapshot.regularPrice is int &&
-      request.resource.data.pricingSnapshot.smallPrice is int &&
-      request.resource.data.pricingSnapshot.extraSaucePrice is int &&
-      request.resource.data.pricingSnapshot.openerPrice is int &&
       request.resource.data.status == "new" &&
       isValidPaymentMethod(request.resource.data.paymentMethod);
     }
@@ -114,6 +104,7 @@ service cloud.firestore {
           "paymentMethod",
           "status",
           "deliveryMessageSnapshot",
+          "itemSnapshot",
           "pricingSnapshot",
           "createdAt",
           "updatedAt"
@@ -121,6 +112,11 @@ service cloud.firestore {
         isValidOrderStatus(request.resource.data.status) &&
         request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if false;
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
     }
   }
 }

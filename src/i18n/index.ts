@@ -112,6 +112,13 @@ export interface Translation {
   statsRangeDay: string;
   statsRangeWeek: string;
   statsRangeMonth: string;
+  statsRangeAll: string;
+  orderFiltersTitle: string;
+  orderSearchLabel: string;
+  searchOrdersPlaceholder: string;
+  allStatusesLabel: string;
+  paymentFilterLabel: string;
+  allPaymentsLabel: string;
 }
 
 export const translations: Record<Language, Translation> = {

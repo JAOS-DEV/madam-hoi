@@ -40,10 +40,38 @@ export function DailySummary({ orders, stock, t }: DailySummaryProps): JSX.Eleme
   });
   const validOrders = inRangeOrders.filter((order) => order.status !== "cancelled");
   const revenue = validOrders.reduce((sum, order) => sum + order.calculated.total, 0);
-  const regularSold = validOrders.reduce((sum, order) => sum + order.quantities.regular, 0);
-  const smallSold = validOrders.reduce((sum, order) => sum + order.quantities.small, 0);
-  const sauceSold = validOrders.reduce((sum, order) => sum + order.quantities.extraSauce, 0);
-  const openerSold = validOrders.reduce((sum, order) => sum + order.quantities.opener, 0);
+  const regularSold = validOrders.reduce(
+    (sum, order) =>
+      sum +
+      order.itemSnapshot
+        .filter((item) => item.productId === "regular")
+        .reduce((acc, item) => acc + item.quantity, 0),
+    0,
+  );
+  const smallSold = validOrders.reduce(
+    (sum, order) =>
+      sum +
+      order.itemSnapshot
+        .filter((item) => item.productId === "small")
+        .reduce((acc, item) => acc + item.quantity, 0),
+    0,
+  );
+  const sauceSold = validOrders.reduce(
+    (sum, order) =>
+      sum +
+      order.itemSnapshot
+        .filter((item) => item.category === "sauce")
+        .reduce((acc, item) => acc + item.quantity, 0),
+    0,
+  );
+  const openerSold = validOrders.reduce(
+    (sum, order) =>
+      sum +
+      order.itemSnapshot
+        .filter((item) => item.stockType === "opener")
+        .reduce((acc, item) => acc + item.quantity, 0),
+    0,
+  );
   const hoiUsed = validOrders.reduce((sum, order) => sum + order.calculated.hoiGramsDeducted, 0);
 
   const statusCount = validOrders.reduce<Record<string, number>>((acc, order) => {

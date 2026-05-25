@@ -13,11 +13,11 @@ import type {
   OrderDoc,
   OrderStatus,
   PaymentMethod,
+  ProductDoc,
   StockDoc,
 } from "../../types/firestore";
 import type { Language } from "../../i18n";
-import type { QuantityState } from "./stockUtils";
-import { calculateOrderSummary } from "./stockUtils";
+import type { OrderQuantities } from "../../types/firestore";
 
 export interface SubmitOrderInput {
   customer: {
@@ -27,7 +27,7 @@ export interface SubmitOrderInput {
     deliveryLocation: string;
     notes?: string;
   };
-  quantities: QuantityState;
+  quantities: OrderQuantities;
   paymentMethod: PaymentMethod;
 }
 
@@ -38,26 +38,67 @@ export interface SubmitOrderResult {
 
 const settingsRef = doc(db, "settings", "main");
 const stockRef = doc(db, "stock", "today");
+const productsCollectionRef = collection(db, "products");
 
 export const subscribeSettings = (
   handler: (settings: MainSettingsDoc | null) => void,
+  onError?: (error: Error) => void,
 ): (() => void) =>
-  onSnapshot(settingsRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      handler(null);
-      return;
-    }
-    handler(snapshot.data() as MainSettingsDoc);
-  });
+  onSnapshot(
+    settingsRef,
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        handler(null);
+        return;
+      }
+      handler(snapshot.data() as MainSettingsDoc);
+    },
+    (error) => {
+      if (onError) {
+        onError(error);
+      }
+    },
+  );
 
-export const subscribeStock = (handler: (stock: StockDoc | null) => void): (() => void) =>
-  onSnapshot(stockRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      handler(null);
-      return;
-    }
-    handler(snapshot.data() as StockDoc);
-  });
+export const subscribeStock = (
+  handler: (stock: StockDoc | null) => void,
+  onError?: (error: Error) => void,
+): (() => void) =>
+  onSnapshot(
+    stockRef,
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        handler(null);
+        return;
+      }
+      handler(snapshot.data() as StockDoc);
+    },
+    (error) => {
+      if (onError) {
+        onError(error);
+      }
+    },
+  );
+
+export const subscribeProducts = (
+  handler: (products: ProductDoc[]) => void,
+  onError?: (error: Error) => void,
+): (() => void) =>
+  onSnapshot(
+    query(productsCollectionRef, orderBy("sortOrder", "asc")),
+    (snapshot) => {
+      const items = snapshot.docs.map((item) => ({
+        id: item.id,
+        ...(item.data() as Omit<ProductDoc, "id">),
+      }));
+      handler(items);
+    },
+    (error) => {
+      if (onError) {
+        onError(error);
+      }
+    },
+  );
 
 export const subscribeOrders = (
   handler: (orders: Array<OrderDoc & { id: string }>) => void,
@@ -103,9 +144,11 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
   const orderRef = generateOrderRef();
 
   return runTransaction(db, async (transaction) => {
-    const [settingsSnap, stockSnap] = await Promise.all([
+    const productsQuery = query(productsCollectionRef);
+    const [settingsSnap, stockSnap, productsSnap] = await Promise.all([
       transaction.get(settingsRef),
       transaction.get(stockRef),
+      transaction.get(productsQuery),
     ]);
 
     if (!settingsSnap.exists() || !stockSnap.exists()) {
@@ -114,20 +157,50 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
 
     const settings = settingsSnap.data() as MainSettingsDoc;
     const stock = stockSnap.data() as StockDoc;
+    const products = productsSnap.docs.map((item) => ({
+      id: item.id,
+      ...(item.data() as Omit<ProductDoc, "id">),
+    }));
 
     if (!settings.orderingOpen) {
       throw new Error("Ordering is closed.");
     }
 
-    const summary = calculateOrderSummary(input.quantities, settings.productSettings);
+    const selectedItems = Object.entries(input.quantities)
+      .filter(([, quantity]) => quantity > 0)
+      .map(([productId, quantity]) => {
+        const product = products.find((item) => item.id === productId);
+        if (!product || !product.active) {
+          throw new Error("INVALID_PRODUCT");
+        }
+        return { product, quantity };
+      });
 
-    if (summary.hoiGramsDeducted > stock.availableHoiGrams) {
+    const sharedHoiDeducted = selectedItems
+      .filter((entry) => entry.product.stockType === "shared_hoi")
+      .reduce((sum, entry) => sum + entry.quantity * entry.product.deductionGrams, 0);
+    const openerDeducted = selectedItems
+      .filter((entry) => entry.product.stockType === "opener")
+      .reduce((sum, entry) => sum + entry.quantity, 0);
+    const includedSauce = selectedItems.reduce(
+      (sum, entry) => sum + entry.quantity * entry.product.includedSauce,
+      0,
+    );
+    const extraSauce = selectedItems
+      .filter((entry) => entry.product.category === "sauce" && entry.product.includedSauce === 0)
+      .reduce((sum, entry) => sum + entry.quantity, 0);
+    const subtotal = selectedItems.reduce(
+      (sum, entry) => sum + entry.quantity * entry.product.price,
+      0,
+    );
+
+    if (sharedHoiDeducted > stock.availableHoiGrams) {
       throw new Error("STOCK_CHANGED");
     }
-    if (input.quantities.opener > stock.openerStock) {
+    if (openerDeducted > stock.openerStock) {
       throw new Error("OPENER_STOCK_CHANGED");
     }
-    if (summary.total <= 0) {
+    if (subtotal <= 0) {
       throw new Error("EMPTY_ORDER");
     }
 
@@ -138,16 +211,28 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
       orderRef,
       customer: input.customer,
       quantities: input.quantities,
-      calculated: summary,
+      calculated: {
+        hoiGramsDeducted: sharedHoiDeducted,
+        includedSauce,
+        extraSauce,
+        totalSauce: includedSauce + extraSauce,
+        subtotal,
+        total: subtotal,
+      },
       paymentMethod: input.paymentMethod,
       status: "new",
       deliveryMessageSnapshot: buildDeliverySnapshot(settings.deliveryMessage),
-      pricingSnapshot: {
-        regularPrice: settings.productSettings.regular.price,
-        smallPrice: settings.productSettings.small.price,
-        extraSaucePrice: settings.productSettings.extraSauce.price,
-        openerPrice: settings.productSettings.opener.price,
-      },
+      itemSnapshot: selectedItems.map((entry) => ({
+        productId: entry.product.id,
+        label: entry.product.label,
+        thaiLabel: entry.product.thaiLabel,
+        price: entry.product.price,
+        quantity: entry.quantity,
+        lineTotal: entry.quantity * entry.product.price,
+        stockType: entry.product.stockType,
+        category: entry.product.category,
+      })),
+      pricingSnapshot: Object.fromEntries(products.map((item) => [item.id, item.price])),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -155,8 +240,8 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
     const orderDocRef = doc(collection(db, "orders"));
     transaction.set(orderDocRef, orderData);
     transaction.update(stockRef, {
-      availableHoiGrams: stock.availableHoiGrams - summary.hoiGramsDeducted,
-      openerStock: stock.openerStock - input.quantities.opener,
+      availableHoiGrams: stock.availableHoiGrams - sharedHoiDeducted,
+      openerStock: stock.openerStock - openerDeducted,
       updatedAt: serverTimestamp(),
     });
 
@@ -195,10 +280,13 @@ export async function cancelOrder(orderId: string, restoreStock: boolean): Promi
 
     const order = orderSnap.data() as OrderDoc;
     const stock = stockSnap.data() as StockDoc;
+    const openerQty = order.itemSnapshot
+      .filter((item) => item.stockType === "opener")
+      .reduce((sum, item) => sum + item.quantity, 0);
     const stockPatch = restoreStock
       ? {
           availableHoiGrams: stock.availableHoiGrams + order.calculated.hoiGramsDeducted,
-          openerStock: stock.openerStock + order.quantities.opener,
+          openerStock: stock.openerStock + openerQty,
           updatedAt: serverTimestamp(),
         }
       : null;

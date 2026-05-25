@@ -93,7 +93,61 @@ const todayStock = {
   updatedAt: serverTimestamp(),
 };
 
+const products = [
+  {
+    id: "regular",
+    label: "Regular Hoi Kraeng",
+    thaiLabel: "หอยแครงชุดใหญ่",
+    price: 200,
+    active: true,
+    stockType: "shared_hoi",
+    deductionGrams: 700,
+    includedSauce: 1,
+    category: "hoi",
+    sortOrder: 1,
+  },
+  {
+    id: "small",
+    label: "Small Hoi Kraeng",
+    thaiLabel: "หอยแครงชุดเล็ก",
+    price: 150,
+    active: true,
+    stockType: "shared_hoi",
+    deductionGrams: 500,
+    includedSauce: 1,
+    category: "hoi",
+    sortOrder: 2,
+  },
+  {
+    id: "extra_sauce",
+    label: "Extra Sauce",
+    thaiLabel: "น้ำจิ้มเพิ่ม",
+    price: 20,
+    active: true,
+    stockType: "none",
+    deductionGrams: 0,
+    includedSauce: 0,
+    category: "sauce",
+    sortOrder: 3,
+  },
+  {
+    id: "opener",
+    label: "Hoi Opener",
+    thaiLabel: "ที่แกะหอย",
+    price: 80,
+    active: true,
+    stockType: "opener",
+    deductionGrams: 0,
+    includedSauce: 0,
+    category: "tool",
+    sortOrder: 4,
+  },
+];
+
 await setDoc(doc(db, "settings", "main"), mainSettings);
 await setDoc(doc(db, "stock", "today"), todayStock);
+await Promise.all(
+  products.map((product) => setDoc(doc(db, "products", product.id), product)),
+);
 
-console.log("Seeded settings/main and stock/today successfully.");
+console.log("Seeded settings/main, stock/today, and products successfully.");

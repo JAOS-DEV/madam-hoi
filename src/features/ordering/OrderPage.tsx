@@ -4,7 +4,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import type { Language } from "../../i18n";
 import { translations } from "../../i18n";
-import type { MainSettingsDoc, StockDoc } from "../../types/firestore";
+import type { MainSettingsDoc, ProductDoc, StockDoc } from "../../types/firestore";
 import { gramsToKgLabel } from "./stockUtils";
 import { OrderForm } from "./OrderForm";
 
@@ -13,6 +13,7 @@ interface OrderPageProps {
   onToggleLanguage: () => void;
   settings: MainSettingsDoc | null;
   stock: StockDoc | null;
+  products: ProductDoc[];
   isInitialLoading: boolean;
 }
 
@@ -21,6 +22,7 @@ export function OrderPage({
   onToggleLanguage,
   settings,
   stock,
+  products,
   isInitialLoading,
 }: OrderPageProps): JSX.Element {
   const navigate = useNavigate();
@@ -36,7 +38,7 @@ export function OrderPage({
       <main className="mx-auto max-w-2xl space-y-4 p-4">
         <Card title="Setup required">
           <p className="text-sm text-slate-700">
-            Missing Firestore docs: <code>settings/main</code> and/or <code>stock/today</code>.
+            Missing Firestore docs: <code>settings/main</code>, <code>stock/today</code>, and/or <code>products</code>.
           </p>
           <p className="mt-2 text-sm text-slate-700">Run <code>npm run seed</code> then refresh.</p>
         </Card>
@@ -59,7 +61,7 @@ export function OrderPage({
 
   return (
     <main className="mx-auto max-w-2xl space-y-4 p-4">
-      <header className="overflow-hidden rounded-xl bg-gradient-to-br from-red-50 via-amber-50 to-emerald-50 p-4 shadow-sm">
+      <header className="overflow-hidden rounded-xl border border-brand-gold/30 bg-gradient-to-br from-brand-blush via-brand-cream to-amber-100 p-4 shadow-[0_10px_30px_-18px_rgba(127,29,29,0.7)]">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <img
@@ -78,6 +80,9 @@ export function OrderPage({
         </div>
         <p className="mt-3 text-sm text-slate-700">{t.brandSubline}</p>
       </header>
+      <div className="brand-shell-divider" aria-hidden="true">
+        <img src={`${assetBase}branding/shell.png`} alt="" />
+      </div>
 
       <Card>
         <p className="text-sm font-medium">{t.announcement}</p>
@@ -94,8 +99,9 @@ export function OrderPage({
 
       {!settings.orderingOpen ? <Alert tone="warning">{t.orderingClosed}</Alert> : null}
       <OrderForm
-        settings={settings}
+        language={language}
         stock={stock}
+        products={products}
         t={t}
         onOrderSuccess={(orderId) => {
           navigate(`/confirmation/${orderId}`);

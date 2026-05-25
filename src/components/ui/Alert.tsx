@@ -11,7 +11,7 @@ export function Alert({ tone = "info", children }: AlertProps): JSX.Element {
       className={clsx(
         "rounded-lg border px-3 py-2 text-sm",
         tone === "info" && "border-sky-200 bg-sky-50 text-sky-800",
-        tone === "warning" && "border-amber-200 bg-amber-50 text-amber-800",
+        tone === "warning" && "border-brand-gold/40 bg-brand-cream text-brand-redDark",
         tone === "error" && "border-red-200 bg-red-50 text-red-800",
       )}
     >

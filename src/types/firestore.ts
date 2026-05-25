@@ -35,6 +35,24 @@ export interface ProductSettings {
   opener: ProductSetting;
 }
 
+export type ProductStockType = "shared_hoi" | "opener" | "none";
+export type ProductCategory = "hoi" | "sauce" | "tool" | "other";
+
+export interface ProductDoc {
+  id: string;
+  label: string;
+  thaiLabel: string;
+  price: number;
+  active: boolean;
+  stockType: ProductStockType;
+  deductionGrams: number;
+  includedSauce: number;
+  category: ProductCategory;
+  mediaUrl?: string;
+  mediaType?: "image" | "video";
+  sortOrder: number;
+}
+
 export interface MainSettingsDoc {
   orderingOpen: boolean;
   announcement: string;
@@ -58,12 +76,7 @@ export interface OrderCustomer {
   notes?: string;
 }
 
-export interface OrderQuantities {
-  regular: number;
-  small: number;
-  extraSauce: number;
-  opener: number;
-}
+export type OrderQuantities = Record<string, number>;
 
 export interface OrderCalculated {
   hoiGramsDeducted: number;
@@ -95,12 +108,17 @@ export interface OrderDoc {
     th: string;
     en: string;
   };
-  pricingSnapshot: {
-    regularPrice: number;
-    smallPrice: number;
-    extraSaucePrice: number;
-    openerPrice: number;
-  };
+  itemSnapshot: Array<{
+    productId: string;
+    label: string;
+    thaiLabel: string;
+    price: number;
+    quantity: number;
+    lineTotal: number;
+    stockType: ProductStockType;
+    category: ProductCategory;
+  }>;
+  pricingSnapshot: Record<string, number>;
   createdAt: unknown;
   updatedAt: unknown;
   cancelledAt?: unknown;
