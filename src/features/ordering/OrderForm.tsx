@@ -17,6 +17,7 @@ import { OrderSummary } from "./OrderSummary";
 
 interface OrderFormProps {
   language: Language;
+  orderingOpen: boolean;
   stock: StockDoc;
   products: ProductDoc[];
   t: Translation;
@@ -28,6 +29,7 @@ const createEmptyQuantities = (products: ProductDoc[]): OrderQuantities =>
 
 export function OrderForm({
   language,
+  orderingOpen,
   stock,
   products,
   t,
@@ -232,7 +234,7 @@ export function OrderForm({
 
       <Alert tone="warning">{t.orderFinalWarning}</Alert>
       {submitError ? <Alert tone="error">{submitError}</Alert> : null}
-      <Button type="submit" fullWidth disabled={isSubmitting || !settings.orderingOpen}>
+      <Button type="submit" fullWidth disabled={isSubmitting || !orderingOpen}>
         {isSubmitting ? "Submitting..." : t.confirmOrder}
       </Button>
     </form>

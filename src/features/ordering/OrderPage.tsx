@@ -100,6 +100,7 @@ export function OrderPage({
       {!settings.orderingOpen ? <Alert tone="warning">{t.orderingClosed}</Alert> : null}
       <OrderForm
         language={language}
+        orderingOpen={settings.orderingOpen}
         stock={stock}
         products={products}
         t={t}

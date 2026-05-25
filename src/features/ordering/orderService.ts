@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -142,13 +143,16 @@ function generateOrderRef(): string {
 
 export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderResult> {
   const orderRef = generateOrderRef();
+  const productsSnapshot = await getDocs(productsCollectionRef);
+  const products: ProductDoc[] = productsSnapshot.docs.map((item) => ({
+    id: item.id,
+    ...(item.data() as Omit<ProductDoc, "id">),
+  }));
 
   return runTransaction(db, async (transaction) => {
-    const productsQuery = query(productsCollectionRef);
-    const [settingsSnap, stockSnap, productsSnap] = await Promise.all([
+    const [settingsSnap, stockSnap] = await Promise.all([
       transaction.get(settingsRef),
       transaction.get(stockRef),
-      transaction.get(productsQuery),
     ]);
 
     if (!settingsSnap.exists() || !stockSnap.exists()) {
@@ -157,16 +161,12 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
 
     const settings = settingsSnap.data() as MainSettingsDoc;
     const stock = stockSnap.data() as StockDoc;
-    const products = productsSnap.docs.map((item) => ({
-      id: item.id,
-      ...(item.data() as Omit<ProductDoc, "id">),
-    }));
 
     if (!settings.orderingOpen) {
       throw new Error("Ordering is closed.");
     }
 
-    const selectedItems = Object.entries(input.quantities)
+    const selectedItems = (Object.entries(input.quantities) as Array<[string, number]>)
       .filter(([, quantity]) => quantity > 0)
       .map(([productId, quantity]) => {
         const product = products.find((item) => item.id === productId);

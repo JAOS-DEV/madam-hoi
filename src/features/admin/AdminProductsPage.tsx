@@ -48,6 +48,55 @@ export function AdminProductsPage({
 }: AdminProductsPageProps): JSX.Element {
   const t = useMemo(() => translations[language], [language]);
   const [form, setForm] = useState<ProductFormState>(emptyForm);
+  const [editingById, setEditingById] = useState<Record<string, ProductFormState>>({});
+  const stockOptions = useMemo(
+    () => [
+      {
+        value: "none",
+        label:
+          language === "th"
+            ? "ไม่หักสต็อก (เหมาะกับสินค้าเสริม)"
+            : "No stock deduction (best for add-ons)",
+      },
+      {
+        value: "shared_hoi",
+        label:
+          language === "th"
+            ? "หักจากสต็อกหอยรวม (กรัม)"
+            : "Deduct from shared hoi stock (grams)",
+      },
+      {
+        value: "opener",
+        label:
+          language === "th"
+            ? "หักจากสต็อกที่แกะหอย (จำนวนชิ้น)"
+            : "Deduct from opener stock (units)",
+      },
+    ],
+    [language],
+  );
+  const categoryOptions = useMemo(
+    () => [
+      { value: "hoi", label: language === "th" ? "หอย" : "Hoi" },
+      { value: "sauce", label: language === "th" ? "น้ำจิ้ม" : "Sauce" },
+      { value: "tool", label: language === "th" ? "อุปกรณ์" : "Tool" },
+      { value: "other", label: language === "th" ? "อื่นๆ" : "Other" },
+    ],
+    [language],
+  );
+
+  const toFormState = (product: ProductDoc): ProductFormState => ({
+    label: product.label,
+    thaiLabel: product.thaiLabel,
+    price: String(product.price),
+    stockType: product.stockType,
+    deductionGrams: String(product.deductionGrams),
+    includedSauce: String(product.includedSauce),
+    category: product.category,
+    mediaUrl: product.mediaUrl ?? "",
+    mediaType: product.mediaType ?? "image",
+    sortOrder: String(product.sortOrder),
+  });
 
   const handleCreate = async (): Promise<void> => {
     await addDoc(collection(db, "products"), {
@@ -64,6 +113,55 @@ export function AdminProductsPage({
       sortOrder: Number(form.sortOrder),
     });
     setForm(emptyForm);
+  };
+
+  const startEdit = (product: ProductDoc): void => {
+    setEditingById((prev) => ({
+      ...prev,
+      [product.id]: toFormState(product),
+    }));
+  };
+
+  const cancelEdit = (productId: string): void => {
+    setEditingById((prev) => {
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+  };
+
+  const updateEditingField = (
+    productId: string,
+    field: keyof ProductFormState,
+    value: string,
+  ): void => {
+    setEditingById((prev) => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveEdit = async (productId: string): Promise<void> => {
+    const edit = editingById[productId];
+    if (!edit) {
+      return;
+    }
+    await updateDoc(doc(db, "products", productId), {
+      label: edit.label,
+      thaiLabel: edit.thaiLabel,
+      price: Number(edit.price),
+      stockType: edit.stockType,
+      deductionGrams: Number(edit.deductionGrams),
+      includedSauce: Number(edit.includedSauce),
+      category: edit.category,
+      mediaUrl: edit.mediaUrl || undefined,
+      mediaType: edit.mediaType,
+      sortOrder: Number(edit.sortOrder),
+    });
+    cancelEdit(productId);
   };
 
   return (
@@ -88,6 +186,11 @@ export function AdminProductsPage({
       </header>
 
       <Card title={language === "th" ? "เพิ่มสินค้าใหม่" : "Add new product"}>
+        <p className="mb-3 text-xs text-slate-600">
+          {language === "th"
+            ? "แนะนำ: สินค้าเสริมให้เลือก 'ไม่หักสต็อก', หอยให้เลือก 'หักจากสต็อกหอยรวม'"
+            : "Tip: use 'No stock deduction' for add-ons, and 'Shared hoi stock' for cockle packs."}
+        </p>
         <div className="grid gap-3 md:grid-cols-2">
           <Input
             label={language === "th" ? "ชื่อสินค้า (อังกฤษ)" : "Product name (EN)"}
@@ -106,7 +209,7 @@ export function AdminProductsPage({
             onChange={(event) => setForm((prev) => ({ ...prev, price: event.target.value }))}
           />
           <Input
-            label={language === "th" ? "ลำดับแสดงผล" : "Sort order"}
+            label={language === "th" ? "ลำดับแสดงผล (เลขน้อยขึ้นก่อน)" : "Display order (lower first)"}
             type="number"
             value={form.sortOrder}
             onChange={(event) => setForm((prev) => ({ ...prev, sortOrder: event.target.value }))}
@@ -117,11 +220,7 @@ export function AdminProductsPage({
             onChange={(event) =>
               setForm((prev) => ({ ...prev, stockType: event.target.value as ProductStockType }))
             }
-            options={[
-              { value: "none", label: language === "th" ? "ไม่หักสต็อก" : "No stock deduction" },
-              { value: "shared_hoi", label: language === "th" ? "หักจากสต็อกหอยรวม" : "Shared hoi stock" },
-              { value: "opener", label: language === "th" ? "หักจากสต็อกที่แกะหอย" : "Opener stock" },
-            ]}
+            options={stockOptions}
           />
           <Select
             label={language === "th" ? "หมวดสินค้า" : "Category"}
@@ -129,41 +228,42 @@ export function AdminProductsPage({
             onChange={(event) =>
               setForm((prev) => ({ ...prev, category: event.target.value as ProductCategory }))
             }
-            options={[
-              { value: "hoi", label: language === "th" ? "หอย" : "Hoi" },
-              { value: "sauce", label: language === "th" ? "น้ำจิ้ม" : "Sauce" },
-              { value: "tool", label: language === "th" ? "อุปกรณ์" : "Tool" },
-              { value: "other", label: language === "th" ? "อื่นๆ" : "Other" },
-            ]}
+            options={categoryOptions}
           />
-          <Input
-            label={language === "th" ? "หักสต็อก (กรัม)" : "Deduction grams"}
-            type="number"
-            value={form.deductionGrams}
-            onChange={(event) => setForm((prev) => ({ ...prev, deductionGrams: event.target.value }))}
-          />
-          <Input
-            label={language === "th" ? "น้ำจิ้มที่รวมให้ต่อชิ้น" : "Included sauce per unit"}
-            type="number"
-            value={form.includedSauce}
-            onChange={(event) => setForm((prev) => ({ ...prev, includedSauce: event.target.value }))}
-          />
+          {form.stockType === "shared_hoi" ? (
+            <Input
+              label={language === "th" ? "หักสต็อก (กรัม)" : "Deduction grams"}
+              type="number"
+              value={form.deductionGrams}
+              onChange={(event) => setForm((prev) => ({ ...prev, deductionGrams: event.target.value }))}
+            />
+          ) : null}
+          {form.category === "hoi" ? (
+            <Input
+              label={language === "th" ? "น้ำจิ้มที่รวมให้ต่อชิ้น" : "Included sauce per unit"}
+              type="number"
+              value={form.includedSauce}
+              onChange={(event) => setForm((prev) => ({ ...prev, includedSauce: event.target.value }))}
+            />
+          ) : null}
           <Input
             label={language === "th" ? "ลิงก์รูป/วิดีโอ (ไม่บังคับ)" : "Image/video URL (optional)"}
             value={form.mediaUrl}
             onChange={(event) => setForm((prev) => ({ ...prev, mediaUrl: event.target.value }))}
           />
-          <Select
-            label={language === "th" ? "ประเภทสื่อ" : "Media type"}
-            value={form.mediaType}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, mediaType: event.target.value as "image" | "video" }))
-            }
-            options={[
-              { value: "image", label: language === "th" ? "รูปภาพ" : "Image" },
-              { value: "video", label: language === "th" ? "วิดีโอ" : "Video" },
-            ]}
-          />
+          {form.mediaUrl.trim() ? (
+            <Select
+              label={language === "th" ? "ประเภทสื่อ" : "Media type"}
+              value={form.mediaType}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, mediaType: event.target.value as "image" | "video" }))
+              }
+              options={[
+                { value: "image", label: language === "th" ? "รูปภาพ" : "Image" },
+                { value: "video", label: language === "th" ? "วิดีโอ" : "Video" },
+              ]}
+            />
+          ) : null}
         </div>
         <div className="mt-3">
           <Button onClick={() => void handleCreate()}>{language === "th" ? "เพิ่มสินค้า" : "Add product"}</Button>
@@ -184,6 +284,20 @@ export function AdminProductsPage({
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  {editingById[product.id] ? (
+                    <>
+                      <Button variant="secondary" onClick={() => cancelEdit(product.id)}>
+                        {language === "th" ? "ยกเลิก" : "Cancel"}
+                      </Button>
+                      <Button onClick={() => void saveEdit(product.id)}>
+                        {language === "th" ? "บันทึก" : "Save"}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="secondary" onClick={() => startEdit(product)}>
+                      {language === "th" ? "แก้ไข" : "Edit"}
+                    </Button>
+                  )}
                   <Button
                     variant="secondary"
                     onClick={() =>
@@ -208,6 +322,78 @@ export function AdminProductsPage({
                   </Button>
                 </div>
               </div>
+              {editingById[product.id] ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <Input
+                    label={language === "th" ? "ชื่อสินค้า (อังกฤษ)" : "Product name (EN)"}
+                    value={editingById[product.id].label}
+                    onChange={(event) => updateEditingField(product.id, "label", event.target.value)}
+                  />
+                  <Input
+                    label={language === "th" ? "ชื่อสินค้า (ไทย)" : "Product name (TH)"}
+                    value={editingById[product.id].thaiLabel}
+                    onChange={(event) => updateEditingField(product.id, "thaiLabel", event.target.value)}
+                  />
+                  <Input
+                    label={language === "th" ? "ราคา" : "Price"}
+                    type="number"
+                    value={editingById[product.id].price}
+                    onChange={(event) => updateEditingField(product.id, "price", event.target.value)}
+                  />
+                  <Input
+                    label={language === "th" ? "ลำดับแสดงผล (เลขน้อยขึ้นก่อน)" : "Display order (lower first)"}
+                    type="number"
+                    value={editingById[product.id].sortOrder}
+                    onChange={(event) => updateEditingField(product.id, "sortOrder", event.target.value)}
+                  />
+                  <Select
+                    label={language === "th" ? "การหักสต็อก" : "Stock behavior"}
+                    value={editingById[product.id].stockType}
+                    onChange={(event) =>
+                      updateEditingField(product.id, "stockType", event.target.value)
+                    }
+                    options={stockOptions}
+                  />
+                  <Select
+                    label={language === "th" ? "หมวดสินค้า" : "Category"}
+                    value={editingById[product.id].category}
+                    onChange={(event) => updateEditingField(product.id, "category", event.target.value)}
+                    options={categoryOptions}
+                  />
+                  {editingById[product.id].stockType === "shared_hoi" ? (
+                    <Input
+                      label={language === "th" ? "หักสต็อก (กรัม)" : "Deduction grams"}
+                      type="number"
+                      value={editingById[product.id].deductionGrams}
+                      onChange={(event) => updateEditingField(product.id, "deductionGrams", event.target.value)}
+                    />
+                  ) : null}
+                  {editingById[product.id].category === "hoi" ? (
+                    <Input
+                      label={language === "th" ? "น้ำจิ้มที่รวมให้ต่อชิ้น" : "Included sauce per unit"}
+                      type="number"
+                      value={editingById[product.id].includedSauce}
+                      onChange={(event) => updateEditingField(product.id, "includedSauce", event.target.value)}
+                    />
+                  ) : null}
+                  <Input
+                    label={language === "th" ? "ลิงก์รูป/วิดีโอ (ไม่บังคับ)" : "Image/video URL (optional)"}
+                    value={editingById[product.id].mediaUrl}
+                    onChange={(event) => updateEditingField(product.id, "mediaUrl", event.target.value)}
+                  />
+                  {editingById[product.id].mediaUrl.trim() ? (
+                    <Select
+                      label={language === "th" ? "ประเภทสื่อ" : "Media type"}
+                      value={editingById[product.id].mediaType}
+                      onChange={(event) => updateEditingField(product.id, "mediaType", event.target.value)}
+                      options={[
+                        { value: "image", label: language === "th" ? "รูปภาพ" : "Image" },
+                        { value: "video", label: language === "th" ? "วิดีโอ" : "Video" },
+                      ]}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
             </article>
           ))}
         </div>
