@@ -11,6 +11,8 @@ import { formatTHB } from "../../utils/money";
 import {
   archiveOrdersByStatuses,
   cancelOrderByAdmin,
+  clearDummyRoutingOrders,
+  seedDummyRoutingOrders,
   setOrderStatus,
   updateOrderLocation,
 } from "./adminService";
@@ -185,6 +187,12 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
       </div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Button onClick={openRouteInMaps}>{t.openRouteInMaps}</Button>
+        <Button variant="secondary" onClick={() => void seedDummyRoutingOrders()}>
+          {t.seedRoutingOrders}
+        </Button>
+        <Button variant="secondary" onClick={() => void clearDummyRoutingOrders()}>
+          {t.clearRoutingOrders}
+        </Button>
         <Button
           variant="secondary"
           onClick={() => void archiveOrdersByStatuses(["cancelled"])}
@@ -210,7 +218,7 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
       <div className="mb-3 rounded-lg border border-brand-gold/30 bg-white/70 p-3">
         <p className="text-sm font-semibold text-brand-redDark">{t.routePreviewTitle}</p>
         <p className="mt-1 text-xs text-slate-600">
-          {t.routePreviewOrigin}: {dispatchCoords ?? dispatchAddress || "-"}
+          {t.routePreviewOrigin}: {(dispatchCoords ?? dispatchAddress) || "-"}
         </p>
         <div className="mt-2 space-y-1 text-xs text-slate-700">
           {routeStops.length === 0 ? (

@@ -131,6 +131,8 @@ export interface Translation {
   routePreviewTitle: string;
   routePreviewOrigin: string;
   routePreviewStop: string;
+  seedRoutingOrders: string;
+  clearRoutingOrders: string;
 }
 
 export const translations: Record<Language, Translation> = {

@@ -130,4 +130,6 @@ export const th: Translation = {
   routePreviewTitle: "พรีวิวเส้นทาง (จุดส่งแรกๆ)",
   routePreviewOrigin: "จุดเริ่ม",
   routePreviewStop: "จุดส่ง",
+  seedRoutingOrders: "เพิ่มออเดอร์ทดสอบพัทยา 20 รายการ",
+  clearRoutingOrders: "ลบออเดอร์ทดสอบพัทยา",
 };

@@ -130,4 +130,6 @@ export const en: Translation = {
   routePreviewTitle: "Route preview (first stops)",
   routePreviewOrigin: "Origin",
   routePreviewStop: "Stop",
+  seedRoutingOrders: "Seed 20 Pattaya test orders",
+  clearRoutingOrders: "Clear Pattaya test orders",
 };
