@@ -4,7 +4,7 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import type { Translation } from "../../i18n";
-import type { OrderDoc, OrderStatus } from "../../types/firestore";
+import type { MainSettingsDoc, OrderDoc, OrderStatus } from "../../types/firestore";
 import { formatDateTime, toDateOrNull } from "../../utils/dates";
 import { formatTHB } from "../../utils/money";
 import { archiveOrdersByStatuses, cancelOrderByAdmin, setOrderStatus } from "./adminService";
@@ -12,6 +12,7 @@ import { archiveOrdersByStatuses, cancelOrderByAdmin, setOrderStatus } from "./a
 interface OrdersPanelProps {
   orders: Array<OrderDoc & { id: string }>;
   t: Translation;
+  settings: MainSettingsDoc;
 }
 
 const statuses: OrderStatus[] = [
@@ -23,7 +24,7 @@ const statuses: OrderStatus[] = [
   "cancelled",
 ];
 
-export function OrdersPanel({ orders, t }: OrdersPanelProps): JSX.Element {
+export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Element {
   const [restoreMap, setRestoreMap] = useState<Record<string, boolean>>({});
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState("");
@@ -72,6 +73,33 @@ export function OrdersPanel({ orders, t }: OrdersPanelProps): JSX.Element {
       return archivedMatch && statusMatch && paymentMatch && dateMatch && searchMatch;
     });
   }, [dateRange, orders, paymentFilter, search, showArchived, statusFilter]);
+
+  const openRouteInMaps = (): void => {
+    const dispatchAddress = settings.dispatchPoint?.address?.trim();
+    if (!dispatchAddress) {
+      window.alert(t.routeNoDispatchPoint);
+      return;
+    }
+    const stops = visibleOrders
+      .filter((order) => order.status !== "cancelled")
+      .map((order) => order.customer.deliveryLocation.trim())
+      .filter(Boolean);
+    if (stops.length === 0) {
+      window.alert(t.routeNoOrdersForRoute);
+      return;
+    }
+    const limitedStops = stops.slice(0, 10);
+    const destination = limitedStops[limitedStops.length - 1];
+    const waypoints = limitedStops.slice(0, -1);
+    const encodedOrigin = encodeURIComponent(dispatchAddress);
+    const encodedDestination = encodeURIComponent(destination);
+    const waypointParam =
+      waypoints.length > 0
+        ? `&waypoints=${waypoints.map((item) => encodeURIComponent(item)).join("%7C")}`
+        : "";
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${encodedOrigin}&destination=${encodedDestination}&travelmode=driving${waypointParam}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <Card title={t.adminOrdersTitle}>
@@ -132,6 +160,7 @@ export function OrdersPanel({ orders, t }: OrdersPanelProps): JSX.Element {
         </div>
       </div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Button onClick={openRouteInMaps}>{t.openRouteInMaps}</Button>
         <Button
           variant="secondary"
           onClick={() => void archiveOrdersByStatuses(["cancelled"])}
@@ -153,6 +182,7 @@ export function OrdersPanel({ orders, t }: OrdersPanelProps): JSX.Element {
           {t.showArchivedOrders}
         </label>
       </div>
+      <p className="mb-3 text-xs text-slate-600">{t.routeStopsLimitedNote}</p>
       <div className="space-y-4">
         {visibleOrders.map((order) => (
           <article key={order.id} className="rounded-lg border border-slate-200 p-3">

@@ -119,6 +119,14 @@ export interface Translation {
   allStatusesLabel: string;
   paymentFilterLabel: string;
   allPaymentsLabel: string;
+  dispatchStartPointLabel: string;
+  dispatchLatLabel: string;
+  dispatchLngLabel: string;
+  routingSettingsHint: string;
+  openRouteInMaps: string;
+  routeNoDispatchPoint: string;
+  routeNoOrdersForRoute: string;
+  routeStopsLimitedNote: string;
 }
 
 export const translations: Record<Language, Translation> = {

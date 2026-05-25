@@ -19,6 +19,13 @@ export function SettingsPanel({ settings, t }: SettingsPanelProps): JSX.Element 
   const [endTime, setEndTime] = useState(settings.deliveryMessage.endTime ?? "22:00");
   const [customTh, setCustomTh] = useState(settings.deliveryMessage.customMessageTh ?? "");
   const [customEn, setCustomEn] = useState(settings.deliveryMessage.customMessageEn ?? "");
+  const [dispatchAddress, setDispatchAddress] = useState(settings.dispatchPoint?.address ?? "");
+  const [dispatchLat, setDispatchLat] = useState(
+    settings.dispatchPoint?.lat !== undefined ? String(settings.dispatchPoint.lat) : "",
+  );
+  const [dispatchLng, setDispatchLng] = useState(
+    settings.dispatchPoint?.lng !== undefined ? String(settings.dispatchPoint.lng) : "",
+  );
 
   const handleSave = async (): Promise<void> => {
     await updateSettingsPatch({
@@ -29,6 +36,11 @@ export function SettingsPanel({ settings, t }: SettingsPanelProps): JSX.Element 
         endTime,
         customMessageTh: customTh,
         customMessageEn: customEn,
+      },
+      dispatchPoint: {
+        address: dispatchAddress,
+        lat: dispatchLat.trim() ? Number(dispatchLat) : undefined,
+        lng: dispatchLng.trim() ? Number(dispatchLng) : undefined,
       },
     });
   };
@@ -72,6 +84,24 @@ export function SettingsPanel({ settings, t }: SettingsPanelProps): JSX.Element 
         </div>
         <Input label={t.customThaiMessage} value={customTh} onChange={(event) => setCustomTh(event.target.value)} />
         <Input label={t.customEnglishMessage} value={customEn} onChange={(event) => setCustomEn(event.target.value)} />
+        <Input
+          label={t.dispatchStartPointLabel}
+          value={dispatchAddress}
+          onChange={(event) => setDispatchAddress(event.target.value)}
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label={t.dispatchLatLabel}
+            value={dispatchLat}
+            onChange={(event) => setDispatchLat(event.target.value)}
+          />
+          <Input
+            label={t.dispatchLngLabel}
+            value={dispatchLng}
+            onChange={(event) => setDispatchLng(event.target.value)}
+          />
+        </div>
+        <p className="text-xs text-slate-600">{t.routingSettingsHint}</p>
         <Button onClick={handleSave}>{t.saveSettings}</Button>
       </div>
     </Card>

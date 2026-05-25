@@ -82,7 +82,7 @@ export function AdminDashboard({
       </div>
 
       <DailySummary orders={orders} stock={stock} t={t} />
-      <OrdersPanel orders={orders} t={t} />
+      <OrdersPanel orders={orders} t={t} settings={settings} />
     </main>
   );
 }

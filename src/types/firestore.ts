@@ -58,6 +58,11 @@ export interface MainSettingsDoc {
   announcement: string;
   phoneNumber: string;
   lineUrl?: string;
+  dispatchPoint?: {
+    address: string;
+    lat?: number;
+    lng?: number;
+  };
   deliveryMessage: DeliveryMessage;
   bankTransfer: BankTransferSettings;
   productSettings: ProductSettings;

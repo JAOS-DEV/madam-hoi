@@ -118,4 +118,12 @@ export const th: Translation = {
   allStatusesLabel: "ทุกสถานะ",
   paymentFilterLabel: "การชำระเงิน",
   allPaymentsLabel: "ทุกวิธีชำระเงิน",
+  dispatchStartPointLabel: "จุดเริ่มส่งสินค้า (ที่อยู่)",
+  dispatchLatLabel: "ละติจูดจุดเริ่ม (ไม่บังคับ)",
+  dispatchLngLabel: "ลองจิจูดจุดเริ่ม (ไม่บังคับ)",
+  routingSettingsHint: "ตั้งค่าจุดเริ่มครั้งเดียว แล้วเปิดเส้นทางจากรายการที่กรองไว้ได้ทันที",
+  openRouteInMaps: "เปิดเส้นทางใน Google Maps",
+  routeNoDispatchPoint: "กรุณาตั้งค่าจุดเริ่มส่งสินค้าในหน้าแอดมินก่อน",
+  routeNoOrdersForRoute: "ไม่พบจุดส่งที่ใช้ได้ในรายการที่กรองอยู่",
+  routeStopsLimitedNote: "Google Maps จะเปิดเส้นทางจากจุดส่ง 10 จุดแรกตามตัวกรองปัจจุบัน",
 };

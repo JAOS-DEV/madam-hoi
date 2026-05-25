@@ -39,6 +39,9 @@ const mainSettings = {
   orderingOpen: true,
   announcement: "Fresh Hoi Kraeng available today",
   phoneNumber: "063-141-8856",
+  dispatchPoint: {
+    address: "Pattaya Klang, Pattaya City, Chon Buri, Thailand",
+  },
   deliveryMessage: {
     template: "estimated_range",
     startTime: "19:00",
