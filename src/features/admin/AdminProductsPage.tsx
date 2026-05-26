@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, deleteField, doc, updateDoc } from "firebase/firestore";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
@@ -149,7 +149,7 @@ export function AdminProductsPage({
     const label = state.label.trim();
     const thaiLabel = state.thaiLabel.trim();
     const mediaUrl = state.mediaUrl.trim();
-    return {
+    const payload: Omit<ProductDoc, "id"> = {
       label,
       thaiLabel,
       price: Math.max(0, toSafeNumber(state.price, 0)),
@@ -159,10 +159,13 @@ export function AdminProductsPage({
         state.stockType === "shared_hoi" ? Math.max(0, toSafeNumber(state.deductionGrams, 0)) : 0,
       includedSauce: state.category === "hoi" ? Math.max(0, toSafeNumber(state.includedSauce, 0)) : 0,
       category: state.category,
-      mediaUrl: mediaUrl || undefined,
-      mediaType: mediaUrl ? state.mediaType : undefined,
       sortOrder: Math.max(0, Math.floor(toSafeNumber(state.sortOrder, 999))),
     };
+    if (mediaUrl) {
+      payload.mediaUrl = mediaUrl;
+      payload.mediaType = state.mediaType;
+    }
+    return payload;
   };
 
   const validateProduct = (state: ProductFormState): string | null => {
@@ -239,7 +242,11 @@ export function AdminProductsPage({
     try {
       const existingProduct = products.find((item) => item.id === productId);
       const payload = normalizePayload(edit, existingProduct?.active ?? true);
-      await updateDoc(doc(db, "products", productId), payload);
+      await updateDoc(doc(db, "products", productId), {
+        ...payload,
+        mediaUrl: payload.mediaUrl ?? deleteField(),
+        mediaType: payload.mediaType ?? deleteField(),
+      });
       cancelEdit(productId);
       showToast(language === "th" ? "บันทึกสินค้าแล้ว" : "Product saved successfully.", "success");
     } catch (error) {
