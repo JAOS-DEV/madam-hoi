@@ -166,22 +166,26 @@ export function AdminProductsPage({
 
   return (
     <main className="mx-auto max-w-5xl space-y-4 p-4">
-      <header className="flex items-center justify-between rounded-xl border border-brand-gold/30 bg-gradient-to-r from-brand-blush via-brand-cream to-amber-100 p-4 shadow-[0_10px_30px_-18px_rgba(127,29,29,0.7)]">
-        <div>
-          <h1 className="text-xl font-bold text-brand-red">{t.adminProductTitle}</h1>
-          <p className="text-sm text-slate-600">
-            {language === "th"
-              ? "เพิ่ม แก้ไข เปิด/ปิด และลบสินค้าได้จากหน้านี้"
-              : "Add, edit, enable/disable, and remove products here."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={onToggleLanguage}>
-            {t.languageToggle}
-          </Button>
-          <Link to="/admin">
-            <Button variant="secondary">{language === "th" ? "กลับแดชบอร์ด" : "Back to dashboard"}</Button>
-          </Link>
+      <header className="rounded-xl border border-brand-gold/30 bg-gradient-to-r from-brand-blush via-brand-cream to-amber-100 p-3 sm:p-4 shadow-[0_10px_30px_-18px_rgba(127,29,29,0.7)]">
+        <div className="space-y-3">
+          <div>
+            <h1 className="text-lg font-bold text-brand-red sm:text-xl">{t.adminProductTitle}</h1>
+            <p className="text-sm text-slate-600">
+              {language === "th"
+                ? "เพิ่ม แก้ไข เปิด/ปิด และลบสินค้าได้จากหน้านี้"
+                : "Add, edit, enable/disable, and remove products here."}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <Button size="compact" variant="secondary" onClick={onToggleLanguage}>
+              {t.languageToggle}
+            </Button>
+            <Link to="/admin" className="w-full sm:w-auto">
+              <Button size="compact" fullWidth variant="secondary">
+                {language === "th" ? "กลับแดชบอร์ด" : "Back to dashboard"}
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -274,7 +278,7 @@ export function AdminProductsPage({
         <div className="space-y-3">
           {products.map((product) => (
             <article key={product.id} className="rounded-lg border border-brand-gold/30 bg-white p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="font-semibold text-brand-redDark">
                     {language === "th" ? product.thaiLabel : product.label}
@@ -283,22 +287,23 @@ export function AdminProductsPage({
                     {language === "th" ? "ราคา" : "Price"}: {product.price} THB
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                   {editingById[product.id] ? (
                     <>
-                      <Button variant="secondary" onClick={() => cancelEdit(product.id)}>
+                      <Button size="compact" variant="secondary" onClick={() => cancelEdit(product.id)}>
                         {language === "th" ? "ยกเลิก" : "Cancel"}
                       </Button>
-                      <Button onClick={() => void saveEdit(product.id)}>
+                      <Button size="compact" onClick={() => void saveEdit(product.id)}>
                         {language === "th" ? "บันทึก" : "Save"}
                       </Button>
                     </>
                   ) : (
-                    <Button variant="secondary" onClick={() => startEdit(product)}>
+                    <Button size="compact" variant="secondary" onClick={() => startEdit(product)}>
                       {language === "th" ? "แก้ไข" : "Edit"}
                     </Button>
                   )}
                   <Button
+                    size="compact"
                     variant="secondary"
                     onClick={() =>
                       void updateDoc(doc(db, "products", product.id), {
@@ -315,6 +320,7 @@ export function AdminProductsPage({
                         : "Enable"}
                   </Button>
                   <Button
+                    size="compact"
                     variant="danger"
                     onClick={() => void deleteDoc(doc(db, "products", product.id))}
                   >

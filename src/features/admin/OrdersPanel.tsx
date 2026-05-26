@@ -158,26 +158,30 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
             ]}
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <Button
+            size="compact"
             variant={dateRange === "all" ? "primary" : "secondary"}
             onClick={() => setDateRange("all")}
           >
             {t.statsRangeAll}
           </Button>
           <Button
+            size="compact"
             variant={dateRange === "day" ? "primary" : "secondary"}
             onClick={() => setDateRange("day")}
           >
             {t.statsRangeDay}
           </Button>
           <Button
+            size="compact"
             variant={dateRange === "week" ? "primary" : "secondary"}
             onClick={() => setDateRange("week")}
           >
             {t.statsRangeWeek}
           </Button>
           <Button
+            size="compact"
             variant={dateRange === "month" ? "primary" : "secondary"}
             onClick={() => setDateRange("month")}
           >
@@ -185,27 +189,31 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
           </Button>
         </div>
       </div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Button onClick={openRouteInMaps}>{t.openRouteInMaps}</Button>
-        <Button variant="secondary" onClick={() => void seedDummyRoutingOrders()}>
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center">
+        <Button size="compact" onClick={openRouteInMaps}>
+          {t.openRouteInMaps}
+        </Button>
+        <Button size="compact" variant="secondary" onClick={() => void seedDummyRoutingOrders()}>
           {t.seedRoutingOrders}
         </Button>
-        <Button variant="secondary" onClick={() => void clearDummyRoutingOrders()}>
+        <Button size="compact" variant="secondary" onClick={() => void clearDummyRoutingOrders()}>
           {t.clearRoutingOrders}
         </Button>
         <Button
+          size="compact"
           variant="secondary"
           onClick={() => void archiveOrdersByStatuses(["cancelled"])}
         >
           {t.clearCancelledOrders}
         </Button>
         <Button
+          size="compact"
           variant="secondary"
           onClick={() => void archiveOrdersByStatuses(["completed"])}
         >
           {t.clearFulfilledOrders}
         </Button>
-        <label className="ml-1 flex items-center gap-2 text-sm text-slate-700">
+        <label className="ml-1 flex items-center gap-2 text-sm text-slate-700 lg:ml-2">
           <input
             type="checkbox"
             checked={showArchived}
@@ -270,15 +278,18 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
               />
               {t.restoreStockOnCancel}
             </label>
-            <Button
-              variant="danger"
-              onClick={() => void cancelOrderByAdmin(order.id, restoreMap[order.id] ?? true)}
-            >
-              {t.cancelOrderLabel}
-            </Button>
-            <Button variant="secondary" onClick={() => setPickingOrderId(order.id)}>
-              {t.pickPinOnMap}
-            </Button>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:max-w-sm sm:grid-cols-2">
+              <Button
+                size="compact"
+                variant="danger"
+                onClick={() => void cancelOrderByAdmin(order.id, restoreMap[order.id] ?? true)}
+              >
+                {t.cancelOrderLabel}
+              </Button>
+              <Button size="compact" variant="secondary" onClick={() => setPickingOrderId(order.id)}>
+                {t.pickPinOnMap}
+              </Button>
+            </div>
           </article>
         ))}
         {visibleOrders.length === 0 ? <p className="text-sm text-slate-500">{t.noOrdersInView}</p> : null}

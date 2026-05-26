@@ -40,26 +40,30 @@ export function AdminDashboard({
 
   return (
     <main className="mx-auto max-w-5xl space-y-4 p-4">
-      <header className="flex items-center justify-between rounded-xl border border-brand-gold/30 bg-gradient-to-r from-brand-blush via-brand-cream to-amber-100 p-4 shadow-[0_10px_30px_-18px_rgba(127,29,29,0.7)]">
-        <div>
-          <h1 className="text-xl font-bold text-brand-red">{t.adminTitle}</h1>
-          <p className="text-sm text-slate-600">{t.adminSubtitle}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={onToggleLanguage}>
-            {t.languageToggle}
-          </Button>
-          <Link to="/">
-            <Button variant="secondary">{t.backToOrdering}</Button>
-          </Link>
-          <Link to="/admin/products">
-            <Button variant="secondary">
-              {language === "th" ? `สินค้า (${products.length})` : `Products (${products.length})`}
+      <header className="rounded-xl border border-brand-gold/30 bg-gradient-to-r from-brand-blush via-brand-cream to-amber-100 p-3 sm:p-4 shadow-[0_10px_30px_-18px_rgba(127,29,29,0.7)]">
+        <div className="space-y-3">
+          <div>
+            <h1 className="text-lg font-bold text-brand-red sm:text-xl">{t.adminTitle}</h1>
+            <p className="text-sm text-slate-600">{t.adminSubtitle}</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <Button size="compact" variant="secondary" onClick={onToggleLanguage}>
+              {t.languageToggle}
             </Button>
-          </Link>
-          <Button variant="secondary" onClick={() => void logoutAdmin()}>
-            {t.signOut}
-          </Button>
+            <Link to="/" className="w-full sm:w-auto">
+              <Button size="compact" fullWidth variant="secondary">
+                {t.backToOrdering}
+              </Button>
+            </Link>
+            <Link to="/admin/products" className="w-full sm:w-auto">
+              <Button size="compact" fullWidth variant="secondary">
+                {language === "th" ? `สินค้า (${products.length})` : `Products (${products.length})`}
+              </Button>
+            </Link>
+            <Button size="compact" variant="secondary" onClick={() => void logoutAdmin()}>
+              {t.signOut}
+            </Button>
+          </div>
         </div>
       </header>
 

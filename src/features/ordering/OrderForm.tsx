@@ -163,7 +163,7 @@ export function OrderForm({
             {t.todayStock}: <strong>{gramsToKgLabel(remainingHoiGrams)}kg</strong>
           </p>
           <p className="text-xs text-slate-600">{t.canStillAdd}</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {activeProducts
               .filter((product) => product.stockType === "shared_hoi")
               .slice(0, 2)

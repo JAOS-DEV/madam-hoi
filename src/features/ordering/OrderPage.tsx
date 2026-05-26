@@ -61,22 +61,24 @@ export function OrderPage({
 
   return (
     <main className="mx-auto max-w-2xl space-y-4 p-4">
-      <header className="overflow-hidden rounded-xl border border-brand-gold/30 bg-gradient-to-br from-brand-blush via-brand-cream to-amber-100 p-4 shadow-[0_10px_30px_-18px_rgba(127,29,29,0.7)]">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
+      <header className="overflow-hidden rounded-xl border border-brand-gold/30 bg-gradient-to-br from-brand-blush via-brand-cream to-amber-100 p-3 sm:p-4 shadow-[0_10px_30px_-18px_rgba(127,29,29,0.7)]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <img
               src={`${assetBase}branding/logo.png`}
               alt="Madam Hoi logo"
-              className="h-20 w-20 rounded-xl object-cover shadow-sm sm:h-24 sm:w-24"
+              className="h-16 w-16 shrink-0 rounded-xl object-cover shadow-sm sm:h-24 sm:w-24"
             />
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold leading-tight text-brand-red">{t.brandName}</h1>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-2xl font-bold leading-tight text-brand-red sm:text-3xl">{t.brandName}</h1>
               <p className="text-sm font-medium text-slate-700">{t.brandTagline}</p>
             </div>
           </div>
-          <Button variant="secondary" onClick={onToggleLanguage}>
-            {t.languageToggle}
-          </Button>
+          <div className="w-full sm:w-auto">
+            <Button size="compact" fullWidth variant="secondary" onClick={onToggleLanguage}>
+              {t.languageToggle}
+            </Button>
+          </div>
         </div>
         <p className="mt-3 text-sm text-slate-700">{t.brandSubline}</p>
       </header>
