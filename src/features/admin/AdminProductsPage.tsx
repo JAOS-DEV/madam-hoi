@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
+import { Toast } from "../../components/ui/Toast";
 import { db } from "../../lib/firebase";
 import { translations, type Language } from "../../i18n";
 import type { ProductDoc, ProductStockType, ProductCategory } from "../../types/firestore";
@@ -28,6 +29,11 @@ interface ProductFormState {
   sortOrder: string;
 }
 
+interface ProductToast {
+  message: string;
+  tone: "success" | "error";
+}
+
 const emptyForm: ProductFormState = {
   label: "",
   thaiLabel: "",
@@ -41,6 +47,11 @@ const emptyForm: ProductFormState = {
   sortOrder: "999",
 };
 
+const toSafeNumber = (value: string, fallback = 0): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 export function AdminProductsPage({
   language,
   products,
@@ -49,6 +60,11 @@ export function AdminProductsPage({
   const t = useMemo(() => translations[language], [language]);
   const [form, setForm] = useState<ProductFormState>(emptyForm);
   const [editingById, setEditingById] = useState<Record<string, ProductFormState>>({});
+  const [toast, setToast] = useState<ProductToast | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const stockOptions = useMemo(
     () => [
       {
@@ -98,21 +114,86 @@ export function AdminProductsPage({
     sortOrder: String(product.sortOrder),
   });
 
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setToast(null);
+    }, 2800);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [toast]);
+
+  const showToast = (message: string, tone: ProductToast["tone"]): void => {
+    setToast({ message, tone });
+  };
+
+  const getReadableError = (error: unknown): string => {
+    if (error instanceof Error) {
+      if (error.message.includes("Missing or insufficient permissions")) {
+        return language === "th"
+          ? "ไม่มีสิทธิ์แก้ไขสินค้า กรุณาตรวจสอบอีเมลแอดมินใน Firestore Rules"
+          : "You do not have permission to edit products. Check admin emails in Firestore rules.";
+      }
+      return error.message;
+    }
+    return language === "th" ? "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง" : "Something went wrong. Please try again.";
+  };
+
+  const normalizePayload = (
+    state: ProductFormState,
+    active: boolean,
+  ): Omit<ProductDoc, "id"> => {
+    const label = state.label.trim();
+    const thaiLabel = state.thaiLabel.trim();
+    const mediaUrl = state.mediaUrl.trim();
+    return {
+      label,
+      thaiLabel,
+      price: Math.max(0, toSafeNumber(state.price, 0)),
+      active,
+      stockType: state.stockType,
+      deductionGrams:
+        state.stockType === "shared_hoi" ? Math.max(0, toSafeNumber(state.deductionGrams, 0)) : 0,
+      includedSauce: state.category === "hoi" ? Math.max(0, toSafeNumber(state.includedSauce, 0)) : 0,
+      category: state.category,
+      mediaUrl: mediaUrl || undefined,
+      mediaType: mediaUrl ? state.mediaType : undefined,
+      sortOrder: Math.max(0, Math.floor(toSafeNumber(state.sortOrder, 999))),
+    };
+  };
+
+  const validateProduct = (state: ProductFormState): string | null => {
+    if (!state.label.trim() || !state.thaiLabel.trim()) {
+      return language === "th"
+        ? "กรุณากรอกชื่อสินค้าให้ครบทั้ง EN และ TH"
+        : "Please fill both EN and TH product names.";
+    }
+    if (toSafeNumber(state.price, -1) < 0) {
+      return language === "th" ? "ราคาต้องมากกว่าหรือเท่ากับ 0" : "Price must be 0 or greater.";
+    }
+    return null;
+  };
+
   const handleCreate = async (): Promise<void> => {
-    await addDoc(collection(db, "products"), {
-      label: form.label,
-      thaiLabel: form.thaiLabel,
-      price: Number(form.price),
-      active: true,
-      stockType: form.stockType,
-      deductionGrams: Number(form.deductionGrams),
-      includedSauce: Number(form.includedSauce),
-      category: form.category,
-      mediaUrl: form.mediaUrl || undefined,
-      mediaType: form.mediaType,
-      sortOrder: Number(form.sortOrder),
-    });
-    setForm(emptyForm);
+    const validationError = validateProduct(form);
+    if (validationError) {
+      showToast(validationError, "error");
+      return;
+    }
+    setIsCreating(true);
+    try {
+      const payload = normalizePayload(form, true);
+      await addDoc(collection(db, "products"), payload);
+      setForm(emptyForm);
+      showToast(language === "th" ? "เพิ่มสินค้าเรียบร้อยแล้ว" : "Product added successfully.", "success");
+    } catch (error) {
+      showToast(getReadableError(error), "error");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const startEdit = (product: ProductDoc): void => {
@@ -149,23 +230,76 @@ export function AdminProductsPage({
     if (!edit) {
       return;
     }
-    await updateDoc(doc(db, "products", productId), {
-      label: edit.label,
-      thaiLabel: edit.thaiLabel,
-      price: Number(edit.price),
-      stockType: edit.stockType,
-      deductionGrams: Number(edit.deductionGrams),
-      includedSauce: Number(edit.includedSauce),
-      category: edit.category,
-      mediaUrl: edit.mediaUrl || undefined,
-      mediaType: edit.mediaType,
-      sortOrder: Number(edit.sortOrder),
-    });
-    cancelEdit(productId);
+    const validationError = validateProduct(edit);
+    if (validationError) {
+      showToast(validationError, "error");
+      return;
+    }
+    setSavingId(productId);
+    try {
+      const existingProduct = products.find((item) => item.id === productId);
+      const payload = normalizePayload(edit, existingProduct?.active ?? true);
+      await updateDoc(doc(db, "products", productId), payload);
+      cancelEdit(productId);
+      showToast(language === "th" ? "บันทึกสินค้าแล้ว" : "Product saved successfully.", "success");
+    } catch (error) {
+      showToast(getReadableError(error), "error");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const toggleProductActive = async (product: ProductDoc): Promise<void> => {
+    setTogglingId(product.id);
+    try {
+      await updateDoc(doc(db, "products", product.id), {
+        active: !product.active,
+      });
+      showToast(
+        product.active
+          ? language === "th"
+            ? "ปิดการขายสินค้าแล้ว"
+            : "Product disabled."
+          : language === "th"
+            ? "เปิดการขายสินค้าแล้ว"
+            : "Product enabled.",
+        "success",
+      );
+    } catch (error) {
+      showToast(getReadableError(error), "error");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleDelete = async (productId: string): Promise<void> => {
+    const confirmed = window.confirm(
+      language === "th" ? "ยืนยันการลบสินค้านี้?" : "Delete this product?",
+    );
+    if (!confirmed) {
+      return;
+    }
+    setDeletingId(productId);
+    try {
+      await deleteDoc(doc(db, "products", productId));
+      cancelEdit(productId);
+      showToast(language === "th" ? "ลบสินค้าเรียบร้อยแล้ว" : "Product deleted.", "success");
+    } catch (error) {
+      showToast(getReadableError(error), "error");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
     <main className="mx-auto max-w-5xl space-y-4 p-4">
+      {toast ? (
+        <div className="pointer-events-none fixed inset-x-0 top-3 z-[1100] flex justify-center px-3">
+          <div className="w-full max-w-md">
+            <Toast message={toast.message} tone={toast.tone} />
+          </div>
+        </div>
+      ) : null}
       <header className="rounded-xl border border-brand-gold/30 bg-gradient-to-r from-brand-blush via-brand-cream to-amber-100 p-3 sm:p-4 shadow-[0_10px_30px_-18px_rgba(127,29,29,0.7)]">
         <div className="space-y-3">
           <div>
@@ -270,7 +404,15 @@ export function AdminProductsPage({
           ) : null}
         </div>
         <div className="mt-3">
-          <Button onClick={() => void handleCreate()}>{language === "th" ? "เพิ่มสินค้า" : "Add product"}</Button>
+          <Button onClick={() => void handleCreate()} disabled={isCreating}>
+            {isCreating
+              ? language === "th"
+                ? "กำลังเพิ่ม..."
+                : "Adding..."
+              : language === "th"
+                ? "เพิ่มสินค้า"
+                : "Add product"}
+          </Button>
         </div>
       </Card>
 
@@ -293,8 +435,18 @@ export function AdminProductsPage({
                       <Button size="compact" variant="secondary" onClick={() => cancelEdit(product.id)}>
                         {language === "th" ? "ยกเลิก" : "Cancel"}
                       </Button>
-                      <Button size="compact" onClick={() => void saveEdit(product.id)}>
-                        {language === "th" ? "บันทึก" : "Save"}
+                      <Button
+                        size="compact"
+                        onClick={() => void saveEdit(product.id)}
+                        disabled={savingId === product.id}
+                      >
+                        {savingId === product.id
+                          ? language === "th"
+                            ? "กำลังบันทึก..."
+                            : "Saving..."
+                          : language === "th"
+                            ? "บันทึก"
+                            : "Save"}
                       </Button>
                     </>
                   ) : (
@@ -305,11 +457,8 @@ export function AdminProductsPage({
                   <Button
                     size="compact"
                     variant="secondary"
-                    onClick={() =>
-                      void updateDoc(doc(db, "products", product.id), {
-                        active: !product.active,
-                      })
-                    }
+                    onClick={() => void toggleProductActive(product)}
+                    disabled={togglingId === product.id}
                   >
                     {product.active
                       ? language === "th"
@@ -322,9 +471,16 @@ export function AdminProductsPage({
                   <Button
                     size="compact"
                     variant="danger"
-                    onClick={() => void deleteDoc(doc(db, "products", product.id))}
+                    onClick={() => void handleDelete(product.id)}
+                    disabled={deletingId === product.id}
                   >
-                    {language === "th" ? "ลบ" : "Delete"}
+                    {deletingId === product.id
+                      ? language === "th"
+                        ? "กำลังลบ..."
+                        : "Deleting..."
+                      : language === "th"
+                        ? "ลบ"
+                        : "Delete"}
                   </Button>
                 </div>
               </div>
