@@ -12,7 +12,7 @@ export const th: Translation = {
   bankTransferOnDelivery: "โอนเงินเมื่อได้รับสินค้า",
   name: "ชื่อ",
   phone: "เบอร์โทรศัพท์",
-  deliveryLocation: "สถานที่จัดส่ง / ชื่อบาร์",
+  deliveryLocation: "สถานที่จัดส่ง",
   notes: "หมายเหตุเพิ่มเติม",
   confirmOrder: "ยืนยันคำสั่งซื้อ",
   soldOut: "สินค้าหมด",

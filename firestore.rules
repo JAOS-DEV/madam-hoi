@@ -18,6 +18,10 @@ service cloud.firestore {
       return value in ["cash", "bank_transfer"];
     }
 
+    function isValidOrderSource(value) {
+      return value in ["web", "line", "phone", "walk_in", "admin_manual"];
+    }
+
     function isValidOrderStatus(value) {
       return value in [
         "new",
@@ -33,6 +37,8 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly([
         "orderRef",
         "customer",
+        "customerId",
+        "orderSource",
         "quantities",
         "calculated",
         "paymentMethod",
@@ -64,6 +70,8 @@ service cloud.firestore {
       request.resource.data.itemSnapshot is list &&
       request.resource.data.pricingSnapshot is map &&
       request.resource.data.status == "new" &&
+      (!("orderSource" in request.resource.data) || isValidOrderSource(request.resource.data.orderSource)) &&
+      (!("customerId" in request.resource.data) || request.resource.data.customerId is string) &&
       isValidPaymentMethod(request.resource.data.paymentMethod);
     }
 
@@ -92,6 +100,14 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /customers/{customerId} {
+      allow read, list, create, update, delete: if isAdmin();
+    }
+
+    match /prepRecipes/{recipeId} {
+      allow read, list, create, update, delete: if isAdmin();
+    }
+
     match /orders/{orderId} {
       allow get: if true;
       allow list: if isAdmin();
@@ -110,6 +126,7 @@ service cloud.firestore {
           "createdAt",
           "updatedAt"
         ]) &&
+        (!("orderSource" in request.resource.data) || isValidOrderSource(request.resource.data.orderSource)) &&
         isValidOrderStatus(request.resource.data.status) &&
         request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if false;

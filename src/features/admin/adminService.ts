@@ -13,7 +13,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { adminEmails, auth, db } from "../../lib/firebase";
-import type { MainSettingsDoc, OrderStatus } from "../../types/firestore";
+import type { MainSettingsDoc, OrderStatus, PrepRecipeDoc } from "../../types/firestore";
 import { sanitizeForFirestore } from "../../utils/firestore";
 import { cancelOrder, updateOrderStatus } from "../ordering/orderService";
 import { kgToGrams } from "../ordering/stockUtils";
@@ -91,6 +91,25 @@ export async function archiveOrdersByStatuses(statuses: OrderStatus[]): Promise<
   return targets.length;
 }
 
+export async function archiveAllActiveOrders(): Promise<number> {
+  const snapshot = await getDocs(collection(db, "orders"));
+  const targets = snapshot.docs.filter((item) => item.data().archivedAt === undefined);
+
+  if (targets.length === 0) {
+    return 0;
+  }
+
+  const batch = writeBatch(db);
+  targets.forEach((item) => {
+    batch.update(item.ref, {
+      archivedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+  await batch.commit();
+  return targets.length;
+}
+
 export async function updateOrderLocation(
   orderId: string,
   location: { lat: number; lng: number },
@@ -99,6 +118,44 @@ export async function updateOrderLocation(
     "customer.location": location,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function upsertPrepRecipe(recipe: Omit<PrepRecipeDoc, "updatedAt">): Promise<void> {
+  const { id, ...payload } = recipe;
+  await setDoc(
+    doc(db, "prepRecipes", id),
+    {
+      ...sanitizeForFirestore(payload),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
+export async function seedDefaultPrepRecipes(): Promise<void> {
+  await Promise.all([
+    upsertPrepRecipe({
+      id: "sauce",
+      target: "Sauce",
+      calcMode: "per_batch",
+      servingsSource: "total_sauce",
+      servingsPerBatch: 20,
+      ingredients: [
+        { name: "Lime", unit: "pcs", amount: 20 },
+        { name: "Chili", unit: "pcs", amount: 30 },
+      ],
+    }),
+    upsertPrepRecipe({
+      id: "salad",
+      target: "Salad",
+      calcMode: "per_item",
+      servingsSource: "orders_count",
+      ingredients: [
+        { name: "Cucumber", unit: "pcs", amount: 0.3 },
+        { name: "Onion", unit: "pcs", amount: 0.2 },
+      ],
+    }),
+  ]);
 }
 
 const pattayaStops = [
@@ -207,6 +264,8 @@ function buildSeedOrder(stop: { name: string; lat: number; lng: number }, index:
       total,
     },
     paymentMethod: index % 2 === 0 ? "cash" : "bank_transfer",
+    orderSource: "admin_manual",
+    customerId: `seed-customer-${index + 1}`,
     status,
     deliveryMessageSnapshot: {
       th: "เวลาจัดส่งโดยประมาณวันนี้: 19:00-22:00",

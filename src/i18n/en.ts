@@ -12,7 +12,7 @@ export const en: Translation = {
   bankTransferOnDelivery: "Bank transfer on delivery",
   name: "Name",
   phone: "Phone number",
-  deliveryLocation: "Delivery location / bar name",
+  deliveryLocation: "Delivery location",
   notes: "Notes",
   confirmOrder: "Confirm Order",
   soldOut: "Sold out",

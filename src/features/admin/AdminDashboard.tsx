@@ -7,7 +7,7 @@ import type { Language } from "../../i18n";
 import { translations } from "../../i18n";
 import type { MainSettingsDoc, OrderDoc, ProductDoc, StockDoc } from "../../types/firestore";
 import { logoutAdmin } from "./adminService";
-import { subscribeOrders } from "../ordering/orderService";
+import { subscribeCustomers, subscribeOrders } from "../ordering/orderService";
 import { BankDetailsPanel } from "./BankDetailsPanel";
 import { DailySummary } from "./DailySummary";
 import { OrdersPanel } from "./OrdersPanel";
@@ -15,6 +15,9 @@ import { ProductSettingsPanel } from "./ProductSettingsPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { StockPanel } from "./StockPanel";
 import { AdminProductsPage } from "./AdminProductsPage";
+import { AdminOrderEntrySection } from "./AdminOrderEntrySection";
+import { ShoppingPrepPanel } from "./ShoppingPrepPanel";
+import type { CustomerProfileDoc } from "../../types/firestore";
 
 interface AdminDashboardProps {
   language: Language;
@@ -44,6 +47,7 @@ export function AdminDashboard({
   const t = useMemo(() => translations[language], [language]);
   const { toast, showToast } = useToast();
   const [orders, setOrders] = useState<Array<OrderDoc & { id: string }>>([]);
+  const [customers, setCustomers] = useState<CustomerProfileDoc[]>([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const sectionParam = searchParams.get("section");
@@ -53,10 +57,17 @@ export function AdminDashboard({
 
   useEffect(() => {
     const unsubOrders = subscribeOrders(setOrders);
+    const unsubCustomers = subscribeCustomers(
+      setCustomers,
+      (error) => {
+        showToast(error.message, "error");
+      },
+    );
     return () => {
       unsubOrders();
+      unsubCustomers();
     };
-  }, []);
+  }, [showToast]);
 
   const handleToggleMenu = (): void => {
     setIsMenuOpen((prev) => !prev);
@@ -177,8 +188,24 @@ export function AdminDashboard({
 
       {activeSection === "orders_reports" ? (
         <div className="space-y-4">
+          <AdminOrderEntrySection
+            language={language}
+            t={t}
+            orderingOpen={settings.orderingOpen}
+            stock={stock}
+            products={products}
+            customers={customers}
+            onToast={showToast}
+          />
+          <ShoppingPrepPanel language={language} orders={orders} onToast={showToast} />
+          <OrdersPanel
+            orders={orders}
+            t={t}
+            language={language}
+            settings={settings}
+            onToast={showToast}
+          />
           <DailySummary orders={orders} stock={stock} t={t} />
-          <OrdersPanel orders={orders} t={t} settings={settings} onToast={showToast} />
         </div>
       ) : null}
     </main>

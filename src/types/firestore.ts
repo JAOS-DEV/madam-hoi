@@ -75,6 +75,39 @@ export interface StockDoc {
   openerStock: number;
 }
 
+export type OrderSource = "web" | "line" | "phone" | "walk_in" | "admin_manual";
+
+export interface CustomerProfileDoc {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  defaultDeliveryLocation?: string;
+  notes?: string;
+  lastOrderAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export type RecipeCalcMode = "per_item" | "per_batch";
+export type RecipeServingsSource = "total_sauce" | "orders_count";
+
+export interface PrepRecipeIngredient {
+  name: string;
+  unit: string;
+  amount: number;
+  wastePct?: number;
+}
+
+export interface PrepRecipeDoc {
+  id: string;
+  target: string;
+  calcMode: RecipeCalcMode;
+  servingsSource: RecipeServingsSource;
+  servingsPerBatch?: number;
+  ingredients: PrepRecipeIngredient[];
+  updatedAt?: unknown;
+}
+
 export interface OrderCustomer {
   name: string;
   phone: string;
@@ -111,6 +144,8 @@ export type OrderStatus =
 export interface OrderDoc {
   orderRef: string;
   customer: OrderCustomer;
+  customerId?: string;
+  orderSource?: OrderSource;
   quantities: OrderQuantities;
   calculated: OrderCalculated;
   paymentMethod: PaymentMethod;

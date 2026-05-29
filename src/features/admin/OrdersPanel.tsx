@@ -5,15 +5,14 @@ import { Input } from "../../components/ui/Input";
 import { MapPinPicker } from "../../components/ui/MapPinPicker";
 import { Select } from "../../components/ui/Select";
 import type { ToastTone } from "../../hooks/useToast";
-import type { Translation } from "../../i18n";
+import type { Language, Translation } from "../../i18n";
 import type { MainSettingsDoc, OrderDoc, OrderStatus } from "../../types/firestore";
 import { formatDateTime, toDateOrNull } from "../../utils/dates";
 import { formatTHB } from "../../utils/money";
 import {
+  archiveAllActiveOrders,
   archiveOrdersByStatuses,
   cancelOrderByAdmin,
-  clearDummyRoutingOrders,
-  seedDummyRoutingOrders,
   setOrderStatus,
   updateOrderLocation,
 } from "./adminService";
@@ -22,6 +21,7 @@ import { getAdminErrorMessage } from "./adminToastErrors";
 interface OrdersPanelProps {
   orders: Array<OrderDoc & { id: string }>;
   t: Translation;
+  language: Language;
   settings: MainSettingsDoc;
   onToast: (message: string, tone: ToastTone) => void;
 }
@@ -35,14 +35,17 @@ const statuses: OrderStatus[] = [
   "cancelled",
 ];
 
-export function OrdersPanel({ orders, t, settings, onToast }: OrdersPanelProps): JSX.Element {
+export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPanelProps): JSX.Element {
   const [restoreMap, setRestoreMap] = useState<Record<string, boolean>>({});
+  const [statusByOrderId, setStatusByOrderId] = useState<Record<string, OrderStatus>>({});
+  const [savingStatusId, setSavingStatusId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
   const [paymentFilter, setPaymentFilter] = useState<"all" | "cash" | "bank_transfer">("all");
   const [dateRange, setDateRange] = useState<"all" | "day" | "week" | "month">("all");
   const [pickingOrderId, setPickingOrderId] = useState<string | null>(null);
+
   const statusLabels: Record<OrderStatus, string> = {
     new: t.statusNew,
     confirmed: t.statusConfirmed,
@@ -51,6 +54,7 @@ export function OrdersPanel({ orders, t, settings, onToast }: OrdersPanelProps):
     completed: t.statusCompleted,
     cancelled: t.statusCancelled,
   };
+
   const visibleOrders = useMemo(() => {
     const queryText = search.trim().toLowerCase();
     const now = new Date();
@@ -78,8 +82,7 @@ export function OrdersPanel({ orders, t, settings, onToast }: OrdersPanelProps):
       const statusMatch = statusFilter === "all" ? true : order.status === statusFilter;
       const paymentMatch = paymentFilter === "all" ? true : order.paymentMethod === paymentFilter;
       const createdDate = toDateOrNull(order.createdAt);
-      const dateMatch =
-        rangeStart === null ? true : createdDate !== null && createdDate >= rangeStart;
+      const dateMatch = rangeStart === null ? true : createdDate !== null && createdDate >= rangeStart;
       const searchable = `${order.orderRef} ${order.customer.name} ${order.customer.phone} ${order.customer.deliveryLocation}`.toLowerCase();
       const searchMatch = queryText.length === 0 ? true : searchable.includes(queryText);
       return archivedMatch && statusMatch && paymentMatch && dateMatch && searchMatch;
@@ -91,6 +94,7 @@ export function OrdersPanel({ orders, t, settings, onToast }: OrdersPanelProps):
     settings.dispatchPoint?.lat !== undefined && settings.dispatchPoint?.lng !== undefined
       ? `${settings.dispatchPoint.lat},${settings.dispatchPoint.lng}`
       : null;
+
   const routeStops = useMemo(
     () =>
       visibleOrders
@@ -109,11 +113,17 @@ export function OrdersPanel({ orders, t, settings, onToast }: OrdersPanelProps):
   );
 
   const handleOrderStatusChange = async (orderId: string, status: OrderStatus): Promise<void> => {
+    const previousStatus = statusByOrderId[orderId] ?? orders.find((item) => item.id === orderId)?.status ?? "new";
+    setStatusByOrderId((prev) => ({ ...prev, [orderId]: status }));
+    setSavingStatusId(orderId);
     try {
       await setOrderStatus(orderId, status);
       onToast(t.toastOrderStatusUpdated, "success");
     } catch (error) {
+      setStatusByOrderId((prev) => ({ ...prev, [orderId]: previousStatus }));
       onToast(getAdminErrorMessage(error, t), "error");
+    } finally {
+      setSavingStatusId(null);
     }
   };
 
@@ -126,28 +136,30 @@ export function OrdersPanel({ orders, t, settings, onToast }: OrdersPanelProps):
     }
   };
 
-  const handleArchiveOrders = async (statuses: OrderStatus[]): Promise<void> => {
+  const handleArchiveOrders = async (targetStatuses: OrderStatus[]): Promise<void> => {
     try {
-      await archiveOrdersByStatuses(statuses);
+      await archiveOrdersByStatuses(targetStatuses);
       onToast(t.toastOrdersArchived, "success");
     } catch (error) {
       onToast(getAdminErrorMessage(error, t), "error");
     }
   };
 
-  const handleSeedTestOrders = async (): Promise<void> => {
-    try {
-      await seedDummyRoutingOrders();
-      onToast(t.toastTestOrdersSeeded, "success");
-    } catch (error) {
-      onToast(getAdminErrorMessage(error, t), "error");
+  const handleClearAllOrders = async (): Promise<void> => {
+    const confirmed = window.confirm(
+      language === "th"
+        ? "ยืนยันล้างออเดอร์ทั้งหมดในหน้าดูแลระบบ?"
+        : "Are you sure you want to clear all active orders?",
+    );
+    if (!confirmed) {
+      return;
     }
-  };
-
-  const handleClearTestOrders = async (): Promise<void> => {
     try {
-      await clearDummyRoutingOrders();
-      onToast(t.toastTestOrdersCleared, "success");
+      const count = await archiveAllActiveOrders();
+      onToast(
+        language === "th" ? `ล้างออเดอร์แล้ว ${count} รายการ` : `Cleared ${count} orders.`,
+        "success",
+      );
     } catch (error) {
       onToast(getAdminErrorMessage(error, t), "error");
     }
@@ -216,75 +228,51 @@ export function OrdersPanel({ orders, t, settings, onToast }: OrdersPanelProps):
           />
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <Button
-            size="compact"
-            variant={dateRange === "all" ? "primary" : "secondary"}
-            onClick={() => setDateRange("all")}
-          >
+          <Button size="compact" variant={dateRange === "all" ? "primary" : "secondary"} onClick={() => setDateRange("all")}>
             {t.statsRangeAll}
           </Button>
-          <Button
-            size="compact"
-            variant={dateRange === "day" ? "primary" : "secondary"}
-            onClick={() => setDateRange("day")}
-          >
+          <Button size="compact" variant={dateRange === "day" ? "primary" : "secondary"} onClick={() => setDateRange("day")}>
             {t.statsRangeDay}
           </Button>
-          <Button
-            size="compact"
-            variant={dateRange === "week" ? "primary" : "secondary"}
-            onClick={() => setDateRange("week")}
-          >
+          <Button size="compact" variant={dateRange === "week" ? "primary" : "secondary"} onClick={() => setDateRange("week")}>
             {t.statsRangeWeek}
           </Button>
-          <Button
-            size="compact"
-            variant={dateRange === "month" ? "primary" : "secondary"}
-            onClick={() => setDateRange("month")}
-          >
+          <Button size="compact" variant={dateRange === "month" ? "primary" : "secondary"} onClick={() => setDateRange("month")}>
             {t.statsRangeMonth}
           </Button>
         </div>
       </div>
+
       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center">
         <Button size="compact" onClick={openRouteInMaps}>
           {t.openRouteInMaps}
         </Button>
-        <Button size="compact" variant="secondary" onClick={() => void handleSeedTestOrders()}>
-          {t.seedRoutingOrders}
-        </Button>
-        <Button size="compact" variant="secondary" onClick={() => void handleClearTestOrders()}>
-          {t.clearRoutingOrders}
-        </Button>
-        <Button
-          size="compact"
-          variant="secondary"
-          onClick={() => void handleArchiveOrders(["cancelled"])}
-        >
+        <Button size="compact" variant="secondary" onClick={() => void handleArchiveOrders(["cancelled"])}>
           {t.clearCancelledOrders}
         </Button>
-        <Button
-          size="compact"
-          variant="secondary"
-          onClick={() => void handleArchiveOrders(["completed"])}
-        >
+        <Button size="compact" variant="secondary" onClick={() => void handleArchiveOrders(["completed"])}>
           {t.clearFulfilledOrders}
         </Button>
+        <Button size="compact" variant="danger" onClick={() => void handleClearAllOrders()}>
+          {language === "th" ? "ล้างทั้งหมด" : "Clear all"}
+        </Button>
         <label className="ml-1 flex items-center gap-2 text-sm text-slate-700 lg:ml-2">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(event) => setShowArchived(event.target.checked)}
-          />
+          <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
           {t.showArchivedOrders}
         </label>
       </div>
+
       <p className="mb-3 text-xs text-slate-600">{t.routeStopsLimitedNote}</p>
-      <div className="mb-3 rounded-lg border border-brand-gold/30 bg-white/70 p-3">
-        <p className="text-sm font-semibold text-brand-redDark">{t.routePreviewTitle}</p>
-        <p className="mt-1 text-xs text-slate-600">
-          {t.routePreviewOrigin}: {(dispatchCoords ?? dispatchAddress) || "-"}
-        </p>
+      <details className="group mb-3 rounded-lg border border-brand-gold/30 bg-white/70 p-3">
+        <summary className="relative cursor-pointer list-none pr-6">
+          <span className="absolute right-0 top-0 inline-block text-xs text-slate-500 transition-transform group-open:rotate-180">
+            ˅
+          </span>
+          <p className="text-sm font-semibold text-brand-redDark">{t.routePreviewTitle}</p>
+          <p className="mt-1 text-xs text-slate-600">
+            {t.routePreviewOrigin}: {(dispatchCoords ?? dispatchAddress) || "-"}
+          </p>
+        </summary>
         <div className="mt-2 space-y-1 text-xs text-slate-700">
           {routeStops.length === 0 ? (
             <p>{t.routeNoOrdersForRoute}</p>
@@ -297,49 +285,93 @@ export function OrdersPanel({ orders, t, settings, onToast }: OrdersPanelProps):
             ))
           )}
         </div>
-      </div>
+      </details>
+
       <div className="space-y-2">
         {visibleOrders.map((order) => (
-          <details key={order.id} className="rounded-lg border border-slate-200 bg-white/80 p-2">
-            <summary className="cursor-pointer list-none">
-              <div className="grid grid-cols-2 items-center gap-x-3 gap-y-1 text-xs sm:grid-cols-4">
-                <p className="font-semibold text-brand-redDark">{order.orderRef}</p>
-                <p className="truncate">{order.customer.name}</p>
-                <p className="text-right sm:text-left">{formatTHB(order.calculated.total)} THB</p>
-                <p className="text-right sm:text-left">{statusLabels[order.status]}</p>
-                <p className="col-span-2 truncate text-slate-500 sm:col-span-3">{order.customer.deliveryLocation}</p>
-                <p className="text-right text-slate-500">{formatDateTime(order.createdAt)}</p>
+          <details key={order.id} className="group rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <summary className="relative cursor-pointer list-none pr-7">
+              <span className="absolute right-0 top-1 inline-block text-sm text-slate-500 transition-transform group-open:rotate-180">
+                ˅
+              </span>
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] text-slate-500">{language === "th" ? "เลขออเดอร์" : "Order ref"}</p>
+                    <p className="font-semibold text-brand-redDark">{order.orderRef}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-slate-500">{language === "th" ? "สถานะ" : "Status"}</p>
+                    <p className="font-medium">{statusLabels[statusByOrderId[order.id] ?? order.status]}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <p>
+                    <span className="block text-[10px] text-slate-500">{language === "th" ? "ลูกค้า" : "Customer"}</span>
+                    {order.customer.name}
+                  </p>
+                  <p className="text-right">
+                    <span className="block text-[10px] text-slate-500">{language === "th" ? "ยอดรวม" : "Total"}</span>
+                    {formatTHB(order.calculated.total)} THB
+                  </p>
+                  <p className="col-span-2 truncate">
+                    <span className="block text-[10px] text-slate-500">
+                      {language === "th" ? "ที่อยู่จัดส่ง" : "Delivery location"}
+                    </span>
+                    {order.customer.deliveryLocation}
+                  </p>
+                  <p className="col-span-2 text-[10px] text-slate-500">
+                    {language === "th" ? "สร้างเมื่อ" : "Created at"}: {formatDateTime(order.createdAt)}
+                  </p>
+                </div>
               </div>
             </summary>
-            <div className="mt-2 space-y-2 border-t border-slate-200 pt-2 text-sm">
-              <p>{order.customer.phone}</p>
+            <div className="mt-3 space-y-3 border-t border-slate-200 pt-3 text-sm">
+              <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                <p>
+                  <span className="block text-[10px] text-slate-500">{language === "th" ? "โทรศัพท์" : "Phone"}</span>
+                  {order.customer.phone}
+                </p>
+                <p>
+                  <span className="block text-[10px] text-slate-500">{language === "th" ? "วิธีจ่ายเงิน" : "Payment"}</span>
+                  {order.paymentMethod === "bank_transfer" ? t.bankTransferOnDelivery : t.cashOnDelivery}
+                </p>
+              </div>
               {order.customer.location ? (
                 <p className="text-xs text-slate-500">
-                  Lat {order.customer.location.lat.toFixed(6)}, Lng {order.customer.location.lng.toFixed(6)}
+                  {language === "th" ? "พิกัด" : "Pin"}: Lat {order.customer.location.lat.toFixed(6)}, Lng{" "}
+                  {order.customer.location.lng.toFixed(6)}
                 </p>
               ) : null}
-              <Select
-                label={t.statusLabel}
-                value={order.status}
-                options={statuses.map((status) => ({ value: status, label: statusLabels[status] }))}
-                onChange={(event) => {
-                  void handleOrderStatusChange(order.id, event.target.value as OrderStatus);
-                }}
-              />
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={restoreMap[order.id] ?? true}
-                  onChange={(event) =>
-                    setRestoreMap((prev) => ({
-                      ...prev,
-                      [order.id]: event.target.checked,
-                    }))
-                  }
+              <div className="space-y-2 rounded-lg border border-slate-200 p-2">
+                <Select
+                  label={t.statusLabel}
+                  value={statusByOrderId[order.id] ?? order.status}
+                  options={statuses.map((status) => ({ value: status, label: statusLabels[status] }))}
+                  onChange={(event) => {
+                    void handleOrderStatusChange(order.id, event.target.value as OrderStatus);
+                  }}
                 />
-                {t.restoreStockOnCancel}
-              </label>
-              <div className="grid grid-cols-1 gap-2 sm:max-w-sm sm:grid-cols-2">
+                {savingStatusId === order.id ? (
+                  <p className="text-xs text-slate-500">{language === "th" ? "กำลังบันทึกสถานะ..." : "Saving status..."}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2 rounded-lg border border-slate-200 p-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={restoreMap[order.id] ?? true}
+                    onChange={(event) =>
+                      setRestoreMap((prev) => ({
+                        ...prev,
+                        [order.id]: event.target.checked,
+                      }))
+                    }
+                  />
+                  {t.restoreStockOnCancel}
+                </label>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <Button
                   size="compact"
                   variant="danger"
@@ -356,6 +388,7 @@ export function OrdersPanel({ orders, t, settings, onToast }: OrdersPanelProps):
         ))}
         {visibleOrders.length === 0 ? <p className="text-sm text-slate-500">{t.noOrdersInView}</p> : null}
       </div>
+
       <MapPinPicker
         isOpen={pickingOrderId !== null}
         title={t.pickPinOnMap}

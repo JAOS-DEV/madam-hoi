@@ -10,10 +10,13 @@ import {
 } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import type {
+  CustomerProfileDoc,
   MainSettingsDoc,
   OrderDoc,
+  OrderSource,
   OrderStatus,
   PaymentMethod,
+  PrepRecipeDoc,
   ProductDoc,
   StockDoc,
 } from "../../types/firestore";
@@ -26,10 +29,17 @@ export interface SubmitOrderInput {
     phone: string;
     email?: string;
     deliveryLocation: string;
+    location: {
+      lat: number;
+      lng: number;
+    };
     notes?: string;
   };
   quantities: OrderQuantities;
   paymentMethod: PaymentMethod;
+  orderSource?: OrderSource;
+  customerId?: string;
+  persistCustomerProfile?: boolean;
 }
 
 export interface SubmitOrderResult {
@@ -40,6 +50,8 @@ export interface SubmitOrderResult {
 const settingsRef = doc(db, "settings", "main");
 const stockRef = doc(db, "stock", "today");
 const productsCollectionRef = collection(db, "products");
+const customersCollectionRef = collection(db, "customers");
+const prepRecipesCollectionRef = collection(db, "prepRecipes");
 
 export const subscribeSettings = (
   handler: (settings: MainSettingsDoc | null) => void,
@@ -108,6 +120,38 @@ export const subscribeOrders = (
     handler(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...(docSnapshot.data() as OrderDoc) })));
   });
 
+export const subscribeCustomers = (
+  handler: (customers: CustomerProfileDoc[]) => void,
+  onError?: (error: Error) => void,
+): (() => void) =>
+  onSnapshot(
+    query(customersCollectionRef, orderBy("updatedAt", "desc")),
+    (snapshot) => {
+      handler(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<CustomerProfileDoc, "id">) })));
+    },
+    (error) => {
+      if (onError) {
+        onError(error);
+      }
+    },
+  );
+
+export const subscribePrepRecipes = (
+  handler: (recipes: PrepRecipeDoc[]) => void,
+  onError?: (error: Error) => void,
+): (() => void) =>
+  onSnapshot(
+    query(prepRecipesCollectionRef, orderBy("target", "asc")),
+    (snapshot) => {
+      handler(snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<PrepRecipeDoc, "id">) })));
+    },
+    (error) => {
+      if (onError) {
+        onError(error);
+      }
+    },
+  );
+
 function buildDeliverySnapshot(deliveryMessage: MainSettingsDoc["deliveryMessage"]): {
   th: string;
   en: string;
@@ -156,7 +200,7 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
     const settings = settingsSnap.data() as MainSettingsDoc;
     const stock = stockSnap.data() as StockDoc;
 
-    if (!settings.orderingOpen) {
+    if (!settings.orderingOpen && input.orderSource !== "admin_manual") {
       throw new Error("Ordering is closed.");
     }
 
@@ -198,12 +242,23 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
       throw new Error("EMPTY_ORDER");
     }
 
+    const customerPayload: OrderDoc["customer"] = {
+      name: input.customer.name,
+      phone: input.customer.phone,
+      deliveryLocation: input.customer.deliveryLocation,
+      location: input.customer.location,
+      ...(input.customer.email ? { email: input.customer.email } : {}),
+      ...(input.customer.notes ? { notes: input.customer.notes } : {}),
+    };
+
     const orderData: Omit<OrderDoc, "createdAt" | "updatedAt"> & {
       createdAt: ReturnType<typeof serverTimestamp>;
       updatedAt: ReturnType<typeof serverTimestamp>;
     } = {
       orderRef,
-      customer: input.customer,
+      customer: customerPayload,
+      ...(input.customerId ? { customerId: input.customerId } : {}),
+      ...(input.orderSource ? { orderSource: input.orderSource } : {}),
       quantities: input.quantities,
       calculated: {
         hoiGramsDeducted: sharedHoiDeducted,
@@ -233,6 +288,23 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
 
     const orderDocRef = doc(collection(db, "orders"));
     transaction.set(orderDocRef, orderData);
+    if (input.persistCustomerProfile) {
+      const normalizedPhone = input.customer.phone.replace(/[^0-9]/g, "");
+      const customerDocRef = doc(customersCollectionRef, input.customerId ?? `phone-${normalizedPhone || "unknown"}`);
+      transaction.set(
+        customerDocRef,
+        {
+          name: input.customer.name,
+          phone: input.customer.phone,
+          email: input.customer.email ?? null,
+          defaultDeliveryLocation: input.customer.deliveryLocation,
+          notes: input.customer.notes ?? null,
+          lastOrderAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
     transaction.update(stockRef, {
       availableHoiGrams: stock.availableHoiGrams - sharedHoiDeducted,
       openerStock: stock.openerStock - openerDeducted,

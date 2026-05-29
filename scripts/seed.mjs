@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-import { Timestamp, doc, getFirestore, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { Timestamp, deleteDoc, doc, getFirestore, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY,
@@ -23,6 +23,7 @@ if (missingKeys.length > 0) {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const args = new Set(process.argv.slice(2));
 
 const seedEmail = process.env.SEED_ADMIN_EMAIL;
 const seedPassword = process.env.SEED_ADMIN_PASSWORD;
@@ -34,6 +35,28 @@ if (!seedEmail || !seedPassword) {
 }
 
 await signInWithEmailAndPassword(auth, seedEmail, seedPassword);
+
+const ORDER_COUNT = 20;
+const CANCELLED_ORDER_INDEXES = [3, 8, 15];
+const COMPLETED_ORDER_INDEXES = [5, 10, 20];
+const shouldSeedOrders = !args.has("--no-orders");
+
+function seedOrderDocId(index) {
+  return `seed-routing-${String(index).padStart(3, "0")}`;
+}
+
+function toOrderRef(index) {
+  return `MH-T${String(index).padStart(3, "0")}`;
+}
+
+async function clearSeedOrdersAndCustomers() {
+  const deletions = [];
+  for (let index = 1; index <= ORDER_COUNT; index += 1) {
+    deletions.push(deleteDoc(doc(db, "orders", seedOrderDocId(index))));
+    deletions.push(deleteDoc(doc(db, "customers", `seed-customer-${index}`)));
+  }
+  await Promise.all(deletions);
+}
 
 const mainSettings = {
   orderingOpen: true,
@@ -171,6 +194,7 @@ const pattayaStops = [
 ];
 
 function buildOrderFromStop(stop, index) {
+  const orderIndex = index + 1;
   const regularQty = index % 3 === 0 ? 2 : 1;
   const smallQty = index % 2;
   const sauceQty = index % 4;
@@ -210,14 +234,16 @@ function buildOrderFromStop(stop, index) {
   createdDate.setHours(13 + (index % 6), 10, 0, 0);
 
   return {
-    orderRef: `MH-T${String(index + 1).padStart(3, "0")}`,
+    orderRef: toOrderRef(orderIndex),
     customer: {
-      name: `Test Customer ${index + 1}`,
+      name: `Test Customer ${orderIndex}`,
       phone: `08${String(10000000 + index).slice(0, 8)}`,
       deliveryLocation: stop.name,
       notes: "Seed dummy order for routing test",
       location: { lat: stop.lat, lng: stop.lng },
     },
+    customerId: `seed-customer-${orderIndex}`,
+    orderSource: "admin_manual",
     quantities,
     calculated: {
       hoiGramsDeducted,
@@ -240,32 +266,70 @@ function buildOrderFromStop(stop, index) {
   };
 }
 
-await setDoc(doc(db, "settings", "main"), mainSettings);
-await setDoc(doc(db, "stock", "today"), todayStock);
-await Promise.all(
-  products.map((product) => setDoc(doc(db, "products", product.id), product)),
-);
-await Promise.all(
-  pattayaStops.map((stop, index) =>
-    setDoc(doc(db, "orders", `seed-routing-${String(index + 1).padStart(3, "0")}`), buildOrderFromStop(stop, index)),
-  ),
-);
-await Promise.all(
-  ["seed-routing-003", "seed-routing-008", "seed-routing-015"].map((id) =>
-    updateDoc(doc(db, "orders", id), {
-      status: "cancelled",
-      updatedAt: serverTimestamp(),
-      cancelledAt: serverTimestamp(),
-    }),
-  ),
-);
-await Promise.all(
-  ["seed-routing-005", "seed-routing-010", "seed-routing-020"].map((id) =>
-    updateDoc(doc(db, "orders", id), {
-      status: "completed",
-      updatedAt: serverTimestamp(),
-    }),
-  ),
-);
+async function seedCoreDocs() {
+  await setDoc(doc(db, "settings", "main"), mainSettings);
+  await setDoc(doc(db, "stock", "today"), todayStock);
+  await Promise.all(
+    products.map((product) => setDoc(doc(db, "products", product.id), product)),
+  );
+}
 
-console.log("Seeded settings/main, stock/today, products, and 20 Pattaya dummy orders.");
+async function seedOrdersAndCustomers() {
+  await clearSeedOrdersAndCustomers();
+
+  await Promise.all(
+    pattayaStops.map((stop, index) =>
+      setDoc(doc(db, "orders", seedOrderDocId(index + 1)), buildOrderFromStop(stop, index)),
+    ),
+  );
+
+  await Promise.all(
+    pattayaStops.map((stop, index) =>
+      setDoc(
+        doc(db, "customers", `seed-customer-${index + 1}`),
+        {
+          name: `Test Customer ${index + 1}`,
+          phone: `08${String(10000000 + index).slice(0, 8)}`,
+          defaultDeliveryLocation: stop.name,
+          notes: "Seed dummy customer profile",
+          lastOrderAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      ),
+    ),
+  );
+
+  await Promise.all(
+    CANCELLED_ORDER_INDEXES.map((index) =>
+      updateDoc(doc(db, "orders", seedOrderDocId(index)), {
+        status: "cancelled",
+        updatedAt: serverTimestamp(),
+        cancelledAt: serverTimestamp(),
+      }),
+    ),
+  );
+
+  await Promise.all(
+    COMPLETED_ORDER_INDEXES.map((index) =>
+      updateDoc(doc(db, "orders", seedOrderDocId(index)), {
+        status: "completed",
+        updatedAt: serverTimestamp(),
+      }),
+    ),
+  );
+}
+
+await seedCoreDocs();
+if (shouldSeedOrders) {
+  await seedOrdersAndCustomers();
+}
+
+if (shouldSeedOrders) {
+  const newCount = ORDER_COUNT - CANCELLED_ORDER_INDEXES.length - COMPLETED_ORDER_INDEXES.length;
+  console.log(
+    `Seed completed: settings/main, stock/today, products (${products.length}), orders (${ORDER_COUNT} total: ${newCount} new, ${CANCELLED_ORDER_INDEXES.length} cancelled, ${COMPLETED_ORDER_INDEXES.length} completed), customers (${ORDER_COUNT}).`,
+  );
+} else {
+  console.log(`Seed completed: settings/main, stock/today, products (${products.length}). Orders skipped (--no-orders).`);
+}
