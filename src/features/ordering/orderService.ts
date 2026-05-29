@@ -124,15 +124,9 @@ function buildDeliverySnapshot(deliveryMessage: MainSettingsDoc["deliveryMessage
       en: `Delivery starts after ${deliveryMessage.startTime ?? "-"}. We will contact you by LINE/phone.`,
     };
   }
-  if (deliveryMessage.template === "custom") {
-    return {
-      th: deliveryMessage.customMessageTh ?? "",
-      en: deliveryMessage.customMessageEn ?? "",
-    };
-  }
   return {
-    th: "เวลาจัดส่งโดยประมาณจะกำหนดในแต่ละวัน และอาจเปลี่ยนแปลงตามเส้นทางและจำนวนออเดอร์",
-    en: "Estimated delivery time is set daily and may vary depending on route and demand.",
+    th: "เวลาจัดส่ง: จะเริ่มช่วงเย็น และอาจเปลี่ยนตามเส้นทางและจำนวนออเดอร์",
+    en: "Delivery window: evening service, may vary with route and order volume.",
   };
 }
 

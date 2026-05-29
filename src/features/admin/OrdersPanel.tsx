@@ -4,6 +4,7 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { MapPinPicker } from "../../components/ui/MapPinPicker";
 import { Select } from "../../components/ui/Select";
+import type { ToastTone } from "../../hooks/useToast";
 import type { Translation } from "../../i18n";
 import type { MainSettingsDoc, OrderDoc, OrderStatus } from "../../types/firestore";
 import { formatDateTime, toDateOrNull } from "../../utils/dates";
@@ -16,11 +17,13 @@ import {
   setOrderStatus,
   updateOrderLocation,
 } from "./adminService";
+import { getAdminErrorMessage } from "./adminToastErrors";
 
 interface OrdersPanelProps {
   orders: Array<OrderDoc & { id: string }>;
   t: Translation;
   settings: MainSettingsDoc;
+  onToast: (message: string, tone: ToastTone) => void;
 }
 
 const statuses: OrderStatus[] = [
@@ -32,7 +35,7 @@ const statuses: OrderStatus[] = [
   "cancelled",
 ];
 
-export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Element {
+export function OrdersPanel({ orders, t, settings, onToast }: OrdersPanelProps): JSX.Element {
   const [restoreMap, setRestoreMap] = useState<Record<string, boolean>>({});
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState("");
@@ -105,6 +108,60 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
     [visibleOrders],
   );
 
+  const handleOrderStatusChange = async (orderId: string, status: OrderStatus): Promise<void> => {
+    try {
+      await setOrderStatus(orderId, status);
+      onToast(t.toastOrderStatusUpdated, "success");
+    } catch (error) {
+      onToast(getAdminErrorMessage(error, t), "error");
+    }
+  };
+
+  const handleCancelOrder = async (orderId: string, restoreStock: boolean): Promise<void> => {
+    try {
+      await cancelOrderByAdmin(orderId, restoreStock);
+      onToast(t.toastOrderCancelled, "success");
+    } catch (error) {
+      onToast(getAdminErrorMessage(error, t), "error");
+    }
+  };
+
+  const handleArchiveOrders = async (statuses: OrderStatus[]): Promise<void> => {
+    try {
+      await archiveOrdersByStatuses(statuses);
+      onToast(t.toastOrdersArchived, "success");
+    } catch (error) {
+      onToast(getAdminErrorMessage(error, t), "error");
+    }
+  };
+
+  const handleSeedTestOrders = async (): Promise<void> => {
+    try {
+      await seedDummyRoutingOrders();
+      onToast(t.toastTestOrdersSeeded, "success");
+    } catch (error) {
+      onToast(getAdminErrorMessage(error, t), "error");
+    }
+  };
+
+  const handleClearTestOrders = async (): Promise<void> => {
+    try {
+      await clearDummyRoutingOrders();
+      onToast(t.toastTestOrdersCleared, "success");
+    } catch (error) {
+      onToast(getAdminErrorMessage(error, t), "error");
+    }
+  };
+
+  const handleUpdateOrderLocation = async (orderId: string, location: { lat: number; lng: number }): Promise<void> => {
+    try {
+      await updateOrderLocation(orderId, location);
+      onToast(t.toastLocationUpdated, "success");
+    } catch (error) {
+      onToast(getAdminErrorMessage(error, t), "error");
+    }
+  };
+
   const openRouteInMaps = (): void => {
     const originValue = dispatchCoords ?? dispatchAddress;
     if (!originValue.trim()) {
@@ -128,7 +185,7 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
   };
 
   return (
-    <Card title={t.adminOrdersTitle}>
+    <Card title={t.adminOrdersTitle} collapsible collapseStorageKey="admin.section.orders">
       <div className="mb-3 space-y-2 rounded-lg border border-brand-gold/30 bg-white/70 p-3">
         <p className="text-sm font-semibold text-brand-redDark">{t.orderFiltersTitle}</p>
         <Input
@@ -193,23 +250,23 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
         <Button size="compact" onClick={openRouteInMaps}>
           {t.openRouteInMaps}
         </Button>
-        <Button size="compact" variant="secondary" onClick={() => void seedDummyRoutingOrders()}>
+        <Button size="compact" variant="secondary" onClick={() => void handleSeedTestOrders()}>
           {t.seedRoutingOrders}
         </Button>
-        <Button size="compact" variant="secondary" onClick={() => void clearDummyRoutingOrders()}>
+        <Button size="compact" variant="secondary" onClick={() => void handleClearTestOrders()}>
           {t.clearRoutingOrders}
         </Button>
         <Button
           size="compact"
           variant="secondary"
-          onClick={() => void archiveOrdersByStatuses(["cancelled"])}
+          onClick={() => void handleArchiveOrders(["cancelled"])}
         >
           {t.clearCancelledOrders}
         </Button>
         <Button
           size="compact"
           variant="secondary"
-          onClick={() => void archiveOrdersByStatuses(["completed"])}
+          onClick={() => void handleArchiveOrders(["completed"])}
         >
           {t.clearFulfilledOrders}
         </Button>
@@ -241,56 +298,61 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
           )}
         </div>
       </div>
-      <div className="space-y-4">
+      <div className="space-y-2">
         {visibleOrders.map((order) => (
-          <article key={order.id} className="rounded-lg border border-slate-200 p-3">
-            <p className="font-semibold">{order.orderRef}</p>
-            <p className="text-xs text-slate-500">{formatDateTime(order.createdAt)}</p>
-            <p>{order.customer.name}</p>
-            <p>{order.customer.phone}</p>
-            <p>{order.customer.deliveryLocation}</p>
-            {order.customer.location ? (
-              <p className="text-xs text-slate-500">
-                Lat {order.customer.location.lat.toFixed(6)}, Lng {order.customer.location.lng.toFixed(6)}
-              </p>
-            ) : null}
-            <p>
-              {t.total}: {formatTHB(order.calculated.total)} THB
-            </p>
-            <Select
-              label={t.statusLabel}
-              value={order.status}
-              options={statuses.map((status) => ({ value: status, label: statusLabels[status] }))}
-              onChange={(event) => {
-                void setOrderStatus(order.id, event.target.value as OrderStatus);
-              }}
-            />
-            <label className="mt-2 flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={restoreMap[order.id] ?? true}
-                onChange={(event) =>
-                  setRestoreMap((prev) => ({
-                    ...prev,
-                    [order.id]: event.target.checked,
-                  }))
-                }
+          <details key={order.id} className="rounded-lg border border-slate-200 bg-white/80 p-2">
+            <summary className="cursor-pointer list-none">
+              <div className="grid grid-cols-2 items-center gap-x-3 gap-y-1 text-xs sm:grid-cols-4">
+                <p className="font-semibold text-brand-redDark">{order.orderRef}</p>
+                <p className="truncate">{order.customer.name}</p>
+                <p className="text-right sm:text-left">{formatTHB(order.calculated.total)} THB</p>
+                <p className="text-right sm:text-left">{statusLabels[order.status]}</p>
+                <p className="col-span-2 truncate text-slate-500 sm:col-span-3">{order.customer.deliveryLocation}</p>
+                <p className="text-right text-slate-500">{formatDateTime(order.createdAt)}</p>
+              </div>
+            </summary>
+            <div className="mt-2 space-y-2 border-t border-slate-200 pt-2 text-sm">
+              <p>{order.customer.phone}</p>
+              {order.customer.location ? (
+                <p className="text-xs text-slate-500">
+                  Lat {order.customer.location.lat.toFixed(6)}, Lng {order.customer.location.lng.toFixed(6)}
+                </p>
+              ) : null}
+              <Select
+                label={t.statusLabel}
+                value={order.status}
+                options={statuses.map((status) => ({ value: status, label: statusLabels[status] }))}
+                onChange={(event) => {
+                  void handleOrderStatusChange(order.id, event.target.value as OrderStatus);
+                }}
               />
-              {t.restoreStockOnCancel}
-            </label>
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:max-w-sm sm:grid-cols-2">
-              <Button
-                size="compact"
-                variant="danger"
-                onClick={() => void cancelOrderByAdmin(order.id, restoreMap[order.id] ?? true)}
-              >
-                {t.cancelOrderLabel}
-              </Button>
-              <Button size="compact" variant="secondary" onClick={() => setPickingOrderId(order.id)}>
-                {t.pickPinOnMap}
-              </Button>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={restoreMap[order.id] ?? true}
+                  onChange={(event) =>
+                    setRestoreMap((prev) => ({
+                      ...prev,
+                      [order.id]: event.target.checked,
+                    }))
+                  }
+                />
+                {t.restoreStockOnCancel}
+              </label>
+              <div className="grid grid-cols-1 gap-2 sm:max-w-sm sm:grid-cols-2">
+                <Button
+                  size="compact"
+                  variant="danger"
+                  onClick={() => void handleCancelOrder(order.id, restoreMap[order.id] ?? true)}
+                >
+                  {t.cancelOrderLabel}
+                </Button>
+                <Button size="compact" variant="secondary" onClick={() => setPickingOrderId(order.id)}>
+                  {t.pickPinOnMap}
+                </Button>
+              </div>
             </div>
-          </article>
+          </details>
         ))}
         {visibleOrders.length === 0 ? <p className="text-sm text-slate-500">{t.noOrdersInView}</p> : null}
       </div>
@@ -310,7 +372,7 @@ export function OrdersPanel({ orders, t, settings }: OrdersPanelProps): JSX.Elem
         onClose={() => setPickingOrderId(null)}
         onConfirm={(lat, lng) => {
           if (pickingOrderId) {
-            void updateOrderLocation(pickingOrderId, { lat, lng });
+            void handleUpdateOrderLocation(pickingOrderId, { lat, lng });
           }
           setPickingOrderId(null);
         }}

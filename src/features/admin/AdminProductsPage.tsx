@@ -1,19 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { addDoc, collection, deleteDoc, deleteField, doc, updateDoc } from "firebase/firestore";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
-import { Toast } from "../../components/ui/Toast";
+import { ToastHost } from "../../components/ui/ToastHost";
+import { useToast, type ToastTone } from "../../hooks/useToast";
 import { db } from "../../lib/firebase";
 import { translations, type Language } from "../../i18n";
 import type { ProductDoc, ProductStockType, ProductCategory } from "../../types/firestore";
+import { getAdminErrorMessage } from "./adminToastErrors";
+import { logoutAdmin } from "./adminService";
 
 interface AdminProductsPageProps {
   language: Language;
   products: ProductDoc[];
   onToggleLanguage: () => void;
+  showHeader?: boolean;
+  onToast?: (message: string, tone: ToastTone) => void;
 }
 
 interface ProductFormState {
@@ -27,11 +32,6 @@ interface ProductFormState {
   mediaUrl: string;
   mediaType: "image" | "video";
   sortOrder: string;
-}
-
-interface ProductToast {
-  message: string;
-  tone: "success" | "error";
 }
 
 const emptyForm: ProductFormState = {
@@ -56,15 +56,20 @@ export function AdminProductsPage({
   language,
   products,
   onToggleLanguage,
+  showHeader = true,
+  onToast,
 }: AdminProductsPageProps): JSX.Element {
   const t = useMemo(() => translations[language], [language]);
+  const localToast = useToast();
+  const showToast = onToast ?? localToast.showToast;
+  const toast = onToast ? null : localToast.toast;
   const [form, setForm] = useState<ProductFormState>(emptyForm);
   const [editingById, setEditingById] = useState<Record<string, ProductFormState>>({});
-  const [toast, setToast] = useState<ProductToast | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const stockOptions = useMemo(
     () => [
       {
@@ -113,34 +118,6 @@ export function AdminProductsPage({
     mediaType: product.mediaType ?? "image",
     sortOrder: String(product.sortOrder),
   });
-
-  useEffect(() => {
-    if (!toast) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setToast(null);
-    }, 2800);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [toast]);
-
-  const showToast = (message: string, tone: ProductToast["tone"]): void => {
-    setToast({ message, tone });
-  };
-
-  const getReadableError = (error: unknown): string => {
-    if (error instanceof Error) {
-      if (error.message.includes("Missing or insufficient permissions")) {
-        return language === "th"
-          ? "ไม่มีสิทธิ์แก้ไขสินค้า กรุณาตรวจสอบอีเมลแอดมินใน Firestore Rules"
-          : "You do not have permission to edit products. Check admin emails in Firestore rules.";
-      }
-      return error.message;
-    }
-    return language === "th" ? "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง" : "Something went wrong. Please try again.";
-  };
 
   const normalizePayload = (
     state: ProductFormState,
@@ -191,9 +168,9 @@ export function AdminProductsPage({
       const payload = normalizePayload(form, true);
       await addDoc(collection(db, "products"), payload);
       setForm(emptyForm);
-      showToast(language === "th" ? "เพิ่มสินค้าเรียบร้อยแล้ว" : "Product added successfully.", "success");
+      showToast(t.toastProductAdded, "success");
     } catch (error) {
-      showToast(getReadableError(error), "error");
+      showToast(getAdminErrorMessage(error, t), "error");
     } finally {
       setIsCreating(false);
     }
@@ -248,9 +225,9 @@ export function AdminProductsPage({
         mediaType: payload.mediaType ?? deleteField(),
       });
       cancelEdit(productId);
-      showToast(language === "th" ? "บันทึกสินค้าแล้ว" : "Product saved successfully.", "success");
+      showToast(t.toastProductSaved, "success");
     } catch (error) {
-      showToast(getReadableError(error), "error");
+      showToast(getAdminErrorMessage(error, t), "error");
     } finally {
       setSavingId(null);
     }
@@ -273,7 +250,7 @@ export function AdminProductsPage({
         "success",
       );
     } catch (error) {
-      showToast(getReadableError(error), "error");
+      showToast(getAdminErrorMessage(error, t), "error");
     } finally {
       setTogglingId(null);
     }
@@ -290,47 +267,94 @@ export function AdminProductsPage({
     try {
       await deleteDoc(doc(db, "products", productId));
       cancelEdit(productId);
-      showToast(language === "th" ? "ลบสินค้าเรียบร้อยแล้ว" : "Product deleted.", "success");
+      showToast(t.toastProductDeleted, "success");
     } catch (error) {
-      showToast(getReadableError(error), "error");
+      showToast(getAdminErrorMessage(error, t), "error");
     } finally {
       setDeletingId(null);
     }
   };
 
+  const handleSignOut = async (): Promise<void> => {
+    await logoutAdmin();
+  };
+
   return (
-    <main className="mx-auto max-w-5xl space-y-4 p-4">
-      {toast ? (
-        <div className="pointer-events-none fixed inset-x-0 top-3 z-[1100] flex justify-center px-3">
-          <div className="w-full max-w-md">
-            <Toast message={toast.message} tone={toast.tone} />
-          </div>
-        </div>
-      ) : null}
-      <header className="rounded-xl border border-brand-gold/30 bg-gradient-to-r from-brand-blush via-brand-cream to-amber-100 p-3 sm:p-4 shadow-[0_10px_30px_-18px_rgba(127,29,29,0.7)]">
-        <div className="space-y-3">
-          <div>
-            <h1 className="text-lg font-bold text-brand-red sm:text-xl">{t.adminProductTitle}</h1>
-            <p className="text-sm text-slate-600">
-              {language === "th"
-                ? "เพิ่ม แก้ไข เปิด/ปิด และลบสินค้าได้จากหน้านี้"
-                : "Add, edit, enable/disable, and remove products here."}
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+    <main className={showHeader ? "mx-auto max-w-5xl space-y-4 p-4" : "space-y-4"}>
+      {toast ? <ToastHost toast={toast} /> : null}
+      {showHeader ? (
+        <div className="relative">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              aria-label={isMenuOpen ? t.adminMenuClose : t.adminMenuLabel}
+              onClick={() => setIsMenuOpen((prev) => !prev)}
+              className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-brand-gold/40 bg-brand-cream text-brand-redDark transition hover:bg-amber-100"
+            >
+              <span className="flex flex-col gap-1">
+                <span className="block h-0.5 w-5 rounded bg-current" />
+                <span className="block h-0.5 w-5 rounded bg-current" />
+                <span className="block h-0.5 w-5 rounded bg-current" />
+              </span>
+            </button>
             <Button size="compact" variant="secondary" onClick={onToggleLanguage}>
               {t.languageToggle}
             </Button>
-            <Link to="/admin" className="w-full sm:w-auto">
-              <Button size="compact" fullWidth variant="secondary">
-                {language === "th" ? "กลับแดชบอร์ด" : "Back to dashboard"}
-              </Button>
-            </Link>
           </div>
+          <header className="rounded-xl border border-brand-gold/30 bg-gradient-to-r from-brand-blush via-brand-cream to-amber-100 p-3 sm:p-4 shadow-[0_10px_30px_-18px_rgba(127,29,29,0.7)]">
+            <div className="space-y-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <img
+                  src={`${import.meta.env.BASE_URL}branding/logo.png`}
+                  alt="Madam Hoi logo"
+                  className="h-9 w-9 shrink-0 rounded-lg object-cover"
+                />
+                <div className="min-w-0">
+                  <h1 className="text-lg font-bold text-brand-red sm:text-xl">{t.adminProductTitle}</h1>
+                  <p className="overflow-hidden text-ellipsis whitespace-nowrap text-xs text-slate-600">
+                    {language === "th"
+                      ? "เพิ่ม แก้ไข เปิด/ปิด และลบสินค้าได้จากหน้านี้"
+                      : "Add, edit, enable/disable, and remove products here."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </header>
+          {isMenuOpen ? (
+            <div className="absolute left-0 right-0 top-[3.7rem] z-20 space-y-2 rounded-xl border border-brand-gold/40 bg-white p-3 shadow-xl sm:w-80">
+              <Link to="/" className="block">
+                <Button size="compact" fullWidth variant="secondary" onClick={() => setIsMenuOpen(false)}>
+                  {t.backToOrdering}
+                </Button>
+              </Link>
+              <Link to="/admin?section=settings" className="block">
+                <Button size="compact" fullWidth variant="secondary" onClick={() => setIsMenuOpen(false)}>
+                  {t.adminTabSettings}
+                </Button>
+              </Link>
+              <Link to="/admin?section=products_stock" className="block">
+                <Button size="compact" fullWidth onClick={() => setIsMenuOpen(false)}>
+                  {t.adminTabProductsStock}
+                </Button>
+              </Link>
+              <Link to="/admin?section=orders_reports" className="block">
+                <Button size="compact" fullWidth variant="secondary" onClick={() => setIsMenuOpen(false)}>
+                  {t.adminOrdersReports}
+                </Button>
+              </Link>
+              <Button size="compact" fullWidth variant="secondary" onClick={() => void handleSignOut()}>
+                {t.signOut}
+              </Button>
+            </div>
+          ) : null}
         </div>
-      </header>
+      ) : null}
 
-      <Card title={language === "th" ? "เพิ่มสินค้าใหม่" : "Add new product"}>
+      <Card
+        title={language === "th" ? "เพิ่มสินค้าใหม่" : "Add new product"}
+        collapsible
+        collapseStorageKey="admin.products.new-product"
+      >
         <p className="mb-3 text-xs text-slate-600">
           {language === "th"
             ? "แนะนำ: สินค้าเสริมให้เลือก 'ไม่หักสต็อก', หอยให้เลือก 'หักจากสต็อกหอยรวม'"
@@ -423,7 +447,11 @@ export function AdminProductsPage({
         </div>
       </Card>
 
-      <Card title={language === "th" ? "สินค้าปัจจุบัน" : "Existing products"}>
+      <Card
+        title={language === "th" ? "สินค้าปัจจุบัน" : "Existing products"}
+        collapsible
+        collapseStorageKey="admin.products.existing-products"
+      >
         <div className="space-y-3">
           {products.map((product) => (
             <article key={product.id} className="rounded-lg border border-brand-gold/30 bg-white p-3">

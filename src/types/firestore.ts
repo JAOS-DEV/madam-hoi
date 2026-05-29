@@ -56,6 +56,8 @@ export interface ProductDoc {
 export interface MainSettingsDoc {
   orderingOpen: boolean;
   announcement: string;
+  announcementTh?: string;
+  announcementEn?: string;
   phoneNumber: string;
   lineUrl?: string;
   dispatchPoint?: {

@@ -80,7 +80,12 @@ export function DailySummary({ orders, stock, t }: DailySummaryProps): JSX.Eleme
   }, {});
 
   return (
-    <Card title={t.adminDailySummaryTitle}>
+    <Card
+      title={t.adminDailySummaryTitle}
+      collapsible
+      collapseStorageKey="admin.section.daily-summary"
+      defaultCollapsed
+    >
       <div className="mb-3 flex gap-2">
         <Button variant={range === "day" ? "primary" : "secondary"} onClick={() => setRange("day")}>
           {t.statsRangeDay}

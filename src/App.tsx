@@ -10,10 +10,23 @@ import { ConfirmationPage } from "./features/ordering/ConfirmationPage";
 import { AdminLogin } from "./features/admin/AdminLogin";
 import { AdminDashboard } from "./features/admin/AdminDashboard";
 import { isAllowedAdmin } from "./features/admin/adminService";
-import { AdminProductsPage } from "./features/admin/AdminProductsPage.tsx";
+
+const LANGUAGE_STORAGE_KEY = "madam-hoi.language";
+
+function getInitialLanguage(): Language {
+  try {
+    const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    if (stored === "th" || stored === "en") {
+      return stored;
+    }
+  } catch {
+    // Ignore localStorage access errors and use default language.
+  }
+  return "th";
+}
 
 function App(): JSX.Element {
-  const [language, setLanguage] = useState<Language>("th");
+  const [language, setLanguage] = useState<Language>(getInitialLanguage);
   const [settings, setSettings] = useState<MainSettingsDoc | null>(null);
   const [stock, setStock] = useState<StockDoc | null>(null);
   const [products, setProducts] = useState<ProductDoc[]>([]);
@@ -66,6 +79,14 @@ function App(): JSX.Element {
     setLanguage((prev) => (prev === "th" ? "en" : "th"));
   };
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    } catch {
+      // Ignore localStorage access errors.
+    }
+  }, [language]);
+
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
@@ -104,17 +125,7 @@ function App(): JSX.Element {
         />
         <Route
           path="/admin/products"
-          element={
-            isAllowedAdmin(user) ? (
-              <AdminProductsPage
-                language={language}
-                products={products}
-                onToggleLanguage={toggleLanguage}
-              />
-            ) : (
-              <AdminLogin t={translations[language]} onToggleLanguage={toggleLanguage} />
-            )
-          }
+          element={<Navigate to="/admin?section=products_stock" replace />}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

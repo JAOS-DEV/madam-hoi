@@ -53,9 +53,17 @@ export interface Translation {
   signOut: string;
   adminTitle: string;
   adminSubtitle: string;
+  adminMenuLabel: string;
+  adminMenuClose: string;
+  adminTabSettings: string;
+  adminTabProductsStock: string;
+  adminTabOrders: string;
+  adminTabReports: string;
   backToOrdering: string;
   adminSettingsPanelTitle: string;
   announcementLabel: string;
+  announcementThaiLabel: string;
+  announcementEnglishLabel: string;
   deliveryTemplateLabel: string;
   templateEstimatedRange: string;
   templateStartsAfter: string;
@@ -133,6 +141,26 @@ export interface Translation {
   routePreviewStop: string;
   seedRoutingOrders: string;
   clearRoutingOrders: string;
+  deliveryWindowLabel: string;
+  adminOrdersReports: string;
+  toastSettingsSaved: string;
+  toastStockSaved: string;
+  toastBankDetailsSaved: string;
+  toastProductSettingsSaved: string;
+  toastOrderingOpened: string;
+  toastOrderingClosed: string;
+  toastOrderStatusUpdated: string;
+  toastOrderCancelled: string;
+  toastLocationUpdated: string;
+  toastOrdersArchived: string;
+  toastTestOrdersSeeded: string;
+  toastTestOrdersCleared: string;
+  toastGenericError: string;
+  toastPermissionError: string;
+  toastProductAdded: string;
+  toastProductSaved: string;
+  toastProductDeleted: string;
+  toastProductToggled: string;
 }
 
 export const translations: Record<Language, Translation> = {

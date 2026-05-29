@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { adminEmails, auth, db } from "../../lib/firebase";
 import type { MainSettingsDoc, OrderStatus } from "../../types/firestore";
+import { sanitizeForFirestore } from "../../utils/firestore";
 import { cancelOrder, updateOrderStatus } from "../ordering/orderService";
 import { kgToGrams } from "../ordering/stockUtils";
 
@@ -40,8 +41,13 @@ export async function updateOrderingStatus(orderingOpen: boolean): Promise<void>
 }
 
 export async function updateStock(kg: number, openerStock: number): Promise<void> {
+  const availableHoiGrams = kgToGrams(kg);
+  if (!Number.isFinite(availableHoiGrams) || !Number.isFinite(openerStock)) {
+    throw new Error("Invalid stock values.");
+  }
+
   await updateDoc(doc(db, "stock", "today"), {
-    availableHoiGrams: kgToGrams(kg),
+    availableHoiGrams,
     openerStock,
     updatedAt: serverTimestamp(),
   });
@@ -50,8 +56,9 @@ export async function updateStock(kg: number, openerStock: number): Promise<void
 export async function updateSettingsPatch(
   patch: Partial<MainSettingsDoc>,
 ): Promise<void> {
+  const sanitizedPatch = sanitizeForFirestore(patch);
   await updateDoc(doc(db, "settings", "main"), {
-    ...patch,
+    ...sanitizedPatch,
     updatedAt: serverTimestamp(),
   });
 }

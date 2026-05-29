@@ -51,13 +51,14 @@ export function OrderPage({
       ? `${t.deliveryEstimatePrefix}: ${settings.deliveryMessage.startTime ?? "-"}-${settings.deliveryMessage.endTime ?? "-"}`
       : settings.deliveryMessage.template === "starts_after"
         ? `${t.deliveryEstimatePrefix}: ${settings.deliveryMessage.startTime ?? "-"}+`
-        : settings.deliveryMessage.template === "custom"
-          ? language === "th"
-            ? settings.deliveryMessage.customMessageTh
-            : settings.deliveryMessage.customMessageEn
-          : language === "th"
-            ? "เวลาจัดส่งโดยประมาณจะกำหนดในแต่ละวัน และอาจเปลี่ยนแปลงตามเส้นทางและจำนวนออเดอร์"
-            : "Estimated delivery time is set daily and may vary depending on route and demand.";
+        : language === "th"
+          ? "ช่วงเวลาจัดส่งอาจเปลี่ยนตามเส้นทางและจำนวนออเดอร์"
+          : "Delivery window may vary depending on route and demand.";
+
+  const announcement =
+    language === "th"
+      ? settings.announcementTh ?? settings.announcement
+      : settings.announcementEn ?? settings.announcement;
 
   return (
     <main className="mx-auto max-w-2xl space-y-4 p-4">
@@ -87,9 +88,10 @@ export function OrderPage({
       </div>
 
       <Card>
-        <p className="text-sm font-medium">{t.announcement}</p>
-        <p>{settings.announcement}</p>
-        <p className="mt-2 text-sm">{deliveryMessage}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-brand-redDark/80">{t.announcement}</p>
+        <p className="text-base font-semibold text-brand-redDark">{announcement}</p>
+        <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-600">{t.deliveryWindowLabel}</p>
+        <p className="text-sm text-slate-700">{deliveryMessage}</p>
       </Card>
 
       <Card>
