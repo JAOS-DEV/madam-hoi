@@ -33,7 +33,7 @@ function toDashboardSection(value: string | null): DashboardSection {
   if (value === "products_stock" || value === "orders_reports") {
     return value;
   }
-  return "settings";
+  return "orders_reports";
 }
 
 export function AdminDashboard({
