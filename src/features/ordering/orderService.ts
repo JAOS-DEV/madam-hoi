@@ -52,6 +52,9 @@ const stockRef = doc(db, "stock", "today");
 const productsCollectionRef = collection(db, "products");
 const customersCollectionRef = collection(db, "customers");
 const prepRecipesCollectionRef = collection(db, "prepRecipes");
+const REGULAR_SPECIAL_KEY = "regular_special";
+const SPECIAL_EXTRA_HOI_GRAMS = 500;
+const SPECIAL_EXTRA_PRICE_THB = 100;
 
 export const subscribeSettings = (
   handler: (settings: MainSettingsDoc | null) => void,
@@ -205,7 +208,7 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
     }
 
     const selectedItems = (Object.entries(input.quantities) as Array<[string, number]>)
-      .filter(([, quantity]) => quantity > 0)
+      .filter(([productId, quantity]) => productId !== REGULAR_SPECIAL_KEY && quantity > 0)
       .map(([productId, quantity]) => {
         const product = products.find((item) => item.id === productId);
         if (!product || !product.active) {
@@ -214,9 +217,14 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
         return { product, quantity };
       });
 
+    const regularQty = input.quantities.regular ?? 0;
+    const rawSpecialRegularCount = Math.max(0, Math.floor(input.quantities[REGULAR_SPECIAL_KEY] ?? 0));
+    const specialRegularCount = Math.min(rawSpecialRegularCount, regularQty);
+
     const sharedHoiDeducted = selectedItems
       .filter((entry) => entry.product.stockType === "shared_hoi")
-      .reduce((sum, entry) => sum + entry.quantity * entry.product.deductionGrams, 0);
+      .reduce((sum, entry) => sum + entry.quantity * entry.product.deductionGrams, 0) +
+      specialRegularCount * SPECIAL_EXTRA_HOI_GRAMS;
     const openerDeducted = selectedItems
       .filter((entry) => entry.product.stockType === "opener")
       .reduce((sum, entry) => sum + entry.quantity, 0);
@@ -227,10 +235,11 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
     const extraSauce = selectedItems
       .filter((entry) => entry.product.category === "sauce" && entry.product.includedSauce === 0)
       .reduce((sum, entry) => sum + entry.quantity, 0);
-    const subtotal = selectedItems.reduce(
+    const baseSubtotal = selectedItems.reduce(
       (sum, entry) => sum + entry.quantity * entry.product.price,
       0,
     );
+    const subtotal = baseSubtotal + specialRegularCount * SPECIAL_EXTRA_PRICE_THB;
 
     if (sharedHoiDeducted > stock.availableHoiGrams) {
       throw new Error("STOCK_CHANGED");
@@ -259,7 +268,13 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
       customer: customerPayload,
       ...(input.customerId ? { customerId: input.customerId } : {}),
       ...(input.orderSource ? { orderSource: input.orderSource } : {}),
-      quantities: input.quantities,
+      quantities:
+        specialRegularCount > 0
+          ? {
+              ...input.quantities,
+              [REGULAR_SPECIAL_KEY]: specialRegularCount,
+            }
+          : input.quantities,
       calculated: {
         hoiGramsDeducted: sharedHoiDeducted,
         includedSauce,
@@ -280,7 +295,23 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
         lineTotal: entry.quantity * entry.product.price,
         stockType: entry.product.stockType,
         category: entry.product.category,
-      })),
+      }))
+        .concat(
+          specialRegularCount > 0
+            ? [
+                {
+                  productId: REGULAR_SPECIAL_KEY,
+                  label: "Special (+500g hoi)",
+                  thaiLabel: "พิเศษ (+500 กรัมหอย)",
+                  price: SPECIAL_EXTRA_PRICE_THB,
+                  quantity: specialRegularCount,
+                  lineTotal: specialRegularCount * SPECIAL_EXTRA_PRICE_THB,
+                  stockType: "shared_hoi",
+                  category: "hoi",
+                },
+              ]
+            : [],
+        ),
       pricingSnapshot: Object.fromEntries(products.map((item) => [item.id, item.price])),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),

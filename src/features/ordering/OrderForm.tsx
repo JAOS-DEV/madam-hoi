@@ -39,6 +39,8 @@ interface OrderFormProps {
 
 const createEmptyQuantities = (products: ProductDoc[]): OrderQuantities =>
   Object.fromEntries(products.map((product) => [product.id, 0]));
+const SPECIAL_EXTRA_HOI_GRAMS = 500;
+const SPECIAL_EXTRA_PRICE_THB = 100;
 
 export function OrderForm({
   language,
@@ -70,6 +72,7 @@ export function OrderForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
+  const [isRegularSpecial, setIsRegularSpecial] = useState(false);
   const isAdminMode = mode === "admin";
   const form = useForm<OrderSchemaInput>({
     resolver: zodResolver(orderSchema),
@@ -106,6 +109,13 @@ export function OrderForm({
   }, [activeProducts]);
 
   useEffect(() => {
+    const regularQty = quantities.regular ?? 0;
+    if (regularQty <= 0) {
+      setIsRegularSpecial(false);
+    }
+  }, [quantities.regular]);
+
+  useEffect(() => {
     form.setValue("orderSource", isAdminMode ? "admin_manual" : "web");
   }, [form, isAdminMode]);
 
@@ -124,16 +134,17 @@ export function OrderForm({
     const extraSauce = selected
       .filter((item) => item.product.category === "sauce" && item.product.includedSauce === 0)
       .reduce((sum, item) => sum + item.qty, 0);
-    const total = selected.reduce((sum, item) => sum + item.qty * item.product.price, 0);
+    const baseTotal = selected.reduce((sum, item) => sum + item.qty * item.product.price, 0);
+    const total = baseTotal + (isRegularSpecial ? SPECIAL_EXTRA_PRICE_THB : 0);
     return {
-      hoiGramsDeducted,
+      hoiGramsDeducted: hoiGramsDeducted + (isRegularSpecial ? SPECIAL_EXTRA_HOI_GRAMS : 0),
       includedSauce,
       extraSauce,
       totalSauce: includedSauce + extraSauce,
       total,
       subtotal: total,
     };
-  }, [activeProducts, quantities]);
+  }, [activeProducts, isRegularSpecial, quantities]);
 
   const remainingHoiGrams = Math.max(0, stock.availableHoiGrams - summary.hoiGramsDeducted);
   const openerSelected = activeProducts
@@ -188,7 +199,13 @@ export function OrderForm({
           },
           notes: values.notes || undefined,
         },
-        quantities,
+        quantities:
+          isRegularSpecial
+            ? {
+                ...quantities,
+                regular_special: 1,
+              }
+            : quantities,
         paymentMethod: values.paymentMethod,
         customerId: values.customerId || undefined,
         orderSource: values.orderSource ?? (isAdminMode ? "admin_manual" : "web"),
@@ -285,15 +302,35 @@ export function OrderForm({
                   ? remainingOpeners > 0
                   : true;
             return (
-              <QuantityStepper
-                key={product.id}
-                label={`${language === "th" ? product.thaiLabel : product.label} (${product.price} THB)`}
-                value={value}
-                canIncrease={canIncrease}
-                canDecrease={value > 0}
-                onIncrease={() => increment(product.id)}
-                onDecrease={() => decrement(product.id)}
-              />
+              <div key={product.id} className="space-y-2">
+                <QuantityStepper
+                  label={`${language === "th" ? product.thaiLabel : product.label} (${product.price} THB)`}
+                  value={value}
+                  canIncrease={canIncrease}
+                  canDecrease={value > 0}
+                  onIncrease={() => increment(product.id)}
+                  onDecrease={() => decrement(product.id)}
+                />
+                {product.id === "regular" && value > 0 ? (
+                  <div className="rounded-lg border border-brand-gold/30 bg-amber-50/40 p-2">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-brand-redDark">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-brand-gold/50"
+                        checked={isRegularSpecial}
+                        disabled={remainingHoiGrams < SPECIAL_EXTRA_HOI_GRAMS}
+                        onChange={(event) => setIsRegularSpecial(event.target.checked)}
+                      />
+                      {language === "th" ? "พิเศษ (+500 กรัมหอย, +100 บาท)" : "Special (+500g hoi, +100 THB)"}
+                    </label>
+                    <p className="mt-1 text-xs text-slate-600">
+                      {language === "th"
+                        ? "เพิ่มเฉพาะหอย ไม่เพิ่มน้ำจิ้มหรือสลัด"
+                        : "Adds hoi only, no extra sauce or salad."}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -371,6 +408,7 @@ export function OrderForm({
       <OrderSummary
         language={language}
         quantities={quantities}
+        isRegularSpecial={isRegularSpecial}
         products={activeProducts}
         t={t}
         paymentLabel={paymentValue === "bank_transfer" ? t.bankTransferOnDelivery : t.cashOnDelivery}

@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-import { Timestamp, deleteDoc, doc, getFirestore, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { Timestamp, doc, getDoc, getFirestore, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY,
@@ -34,7 +34,30 @@ if (!seedEmail || !seedPassword) {
   );
 }
 
-await signInWithEmailAndPassword(auth, seedEmail, seedPassword);
+function toErrorMessage(error) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+async function runStep(name, callback) {
+  try {
+    await callback();
+    console.log(`[seed] ok: ${name}`);
+  } catch (error) {
+    console.error(`[seed] failed: ${name}`);
+    throw error;
+  }
+}
+
+const credentials = await signInWithEmailAndPassword(auth, seedEmail, seedPassword);
+const idTokenResult = await credentials.user.getIdTokenResult(true);
+console.log(`[seed] project: ${firebaseConfig.projectId}`);
+console.log(`[seed] auth uid: ${credentials.user.uid}`);
+console.log(`[seed] auth email: ${credentials.user.email ?? "<none>"}`);
+console.log(`[seed] token email claim: ${idTokenResult.claims.email ?? "<none>"}`);
+console.log(`[seed] env seed email: ${seedEmail}`);
 
 const ORDER_COUNT = 20;
 const CANCELLED_ORDER_INDEXES = [3, 8, 15];
@@ -50,12 +73,8 @@ function toOrderRef(index) {
 }
 
 async function clearSeedOrdersAndCustomers() {
-  const deletions = [];
-  for (let index = 1; index <= ORDER_COUNT; index += 1) {
-    deletions.push(deleteDoc(doc(db, "orders", seedOrderDocId(index))));
-    deletions.push(deleteDoc(doc(db, "customers", `seed-customer-${index}`)));
-  }
-  await Promise.all(deletions);
+  // Intentionally no-op: order deletes are blocked by Firestore rules.
+  // We achieve idempotency by writing deterministic docs with setDoc overwrite.
 }
 
 const mainSettings = {
@@ -277,11 +296,18 @@ async function seedCoreDocs() {
 async function seedOrdersAndCustomers() {
   await clearSeedOrdersAndCustomers();
 
-  await Promise.all(
-    pattayaStops.map((stop, index) =>
-      setDoc(doc(db, "orders", seedOrderDocId(index + 1)), buildOrderFromStop(stop, index)),
-    ),
-  );
+  for (const [index, stop] of pattayaStops.entries()) {
+    const orderRef = doc(db, "orders", seedOrderDocId(index + 1));
+    const orderData = buildOrderFromStop(stop, index);
+    const existingOrderSnapshot = await getDoc(orderRef);
+    if (existingOrderSnapshot.exists()) {
+      const existingCreatedAt = existingOrderSnapshot.data().createdAt;
+      if (existingCreatedAt) {
+        orderData.createdAt = existingCreatedAt;
+      }
+    }
+    await setDoc(orderRef, orderData);
+  }
 
   await Promise.all(
     pattayaStops.map((stop, index) =>
@@ -295,7 +321,6 @@ async function seedOrdersAndCustomers() {
           lastOrderAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         },
-        { merge: true },
       ),
     ),
   );
@@ -320,9 +345,9 @@ async function seedOrdersAndCustomers() {
   );
 }
 
-await seedCoreDocs();
+await runStep("seed core docs", seedCoreDocs);
 if (shouldSeedOrders) {
-  await seedOrdersAndCustomers();
+  await runStep("seed orders and customers", seedOrdersAndCustomers);
 }
 
 if (shouldSeedOrders) {
@@ -333,3 +358,7 @@ if (shouldSeedOrders) {
 } else {
   console.log(`Seed completed: settings/main, stock/today, products (${products.length}). Orders skipped (--no-orders).`);
 }
+
+await auth.signOut().catch((error) => {
+  console.warn(`[seed] sign out warning: ${toErrorMessage(error)}`);
+});
