@@ -26,7 +26,8 @@ export function isAllowedAdmin(user: User | null): boolean {
 }
 
 export async function loginAdmin(email: string, password: string): Promise<void> {
-  await signInWithEmailAndPassword(auth, email, password);
+  const normalizedEmail = email.trim().toLowerCase();
+  await signInWithEmailAndPassword(auth, normalizedEmail, password);
 }
 
 export async function logoutAdmin(): Promise<void> {
