@@ -38,10 +38,46 @@ interface OrderFormProps {
   onToast?: (message: string, tone: ToastTone) => void;
 }
 
+interface AdminOrderDraft {
+  quantities: OrderQuantities;
+  isRegularSpecial: boolean;
+  values: Partial<OrderSchemaInput>;
+}
+
 const createEmptyQuantities = (products: ProductDoc[]): OrderQuantities =>
   Object.fromEntries(products.map((product) => [product.id, 0]));
 const SPECIAL_EXTRA_HOI_GRAMS = 500;
 const SPECIAL_EXTRA_PRICE_THB = 100;
+const ADMIN_ORDER_DRAFT_KEY = "madam-hoi.admin-order-draft";
+
+function readAdminOrderDraft(): AdminOrderDraft | null {
+  try {
+    const raw = window.sessionStorage.getItem(ADMIN_ORDER_DRAFT_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as AdminOrderDraft;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeAdminOrderDraft(draft: AdminOrderDraft): void {
+  try {
+    window.sessionStorage.setItem(ADMIN_ORDER_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Ignore storage failures; the form still works without draft persistence.
+  }
+}
+
+function clearAdminOrderDraft(): void {
+  try {
+    window.sessionStorage.removeItem(ADMIN_ORDER_DRAFT_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
 
 export function OrderForm({
   language,
@@ -76,6 +112,7 @@ export function OrderForm({
   const [isResolvingDeliveryAddress, setIsResolvingDeliveryAddress] = useState(false);
   const [isRegularSpecial, setIsRegularSpecial] = useState(false);
   const isAdminMode = mode === "admin";
+  const [hasRestoredAdminDraft, setHasRestoredAdminDraft] = useState(false);
   const form = useForm<OrderSchemaInput>({
     resolver: zodResolver(orderSchema),
     defaultValues: {
@@ -109,6 +146,34 @@ export function OrderForm({
       return next;
     });
   }, [activeProducts]);
+
+  useEffect(() => {
+    if (!isAdminMode || hasRestoredAdminDraft || activeProducts.length === 0) {
+      return;
+    }
+    const draft = readAdminOrderDraft();
+    if (draft) {
+      const nextQuantities = createEmptyQuantities(activeProducts);
+      activeProducts.forEach((product) => {
+        nextQuantities[product.id] = draft.quantities[product.id] ?? 0;
+      });
+      setQuantities(nextQuantities);
+      setIsRegularSpecial(draft.isRegularSpecial);
+      form.reset({
+        name: draft.values.name ?? "",
+        phone: draft.values.phone ?? "",
+        email: draft.values.email ?? "",
+        deliveryLocation: draft.values.deliveryLocation ?? "",
+        notes: draft.values.notes ?? "",
+        paymentMethod: draft.values.paymentMethod ?? "cash",
+        customerId: draft.values.customerId ?? "",
+        orderSource: draft.values.orderSource ?? "admin_manual",
+        locationLat: draft.values.locationLat,
+        locationLng: draft.values.locationLng,
+      });
+    }
+    setHasRestoredAdminDraft(true);
+  }, [activeProducts, form, hasRestoredAdminDraft, isAdminMode]);
 
   useEffect(() => {
     const regularQty = quantities.regular ?? 0;
@@ -185,6 +250,7 @@ export function OrderForm({
       const address = await reverseGeocodeAddress(lat, lng);
       if (address) {
         form.setValue("deliveryLocation", address, { shouldDirty: true, shouldValidate: true });
+        setIsResolvingDeliveryAddress(false);
         notify(
           language === "th" ? "อัปเดตสถานที่จัดส่งจากพินแล้ว" : "Delivery location filled from pin.",
           "success",
@@ -246,6 +312,9 @@ export function OrderForm({
         orderSource: values.orderSource ?? (isAdminMode ? "admin_manual" : "web"),
         persistCustomerProfile: isAdminMode,
       });
+      if (isAdminMode) {
+        clearAdminOrderDraft();
+      }
       onOrderSuccess(result.orderId, result.orderRef, values.paymentMethod);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to submit order.";
@@ -291,7 +360,19 @@ export function OrderForm({
 
   const paymentValue = form.watch("paymentMethod");
   const selectedCustomerId = form.watch("customerId");
+  const watchedValues = form.watch();
   const selectedCustomer = customers.find((item) => item.id === selectedCustomerId);
+
+  useEffect(() => {
+    if (!isAdminMode || !hasRestoredAdminDraft) {
+      return;
+    }
+    writeAdminOrderDraft({
+      quantities,
+      isRegularSpecial,
+      values: watchedValues,
+    });
+  }, [hasRestoredAdminDraft, isAdminMode, isRegularSpecial, quantities, watchedValues]);
 
   useEffect(() => {
     if (!isAdminMode || !selectedCustomer) {
@@ -306,6 +387,7 @@ export function OrderForm({
 
   const selectedLat = form.watch("locationLat");
   const selectedLng = form.watch("locationLng");
+  const deliveryLocationValue = form.watch("deliveryLocation");
 
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
@@ -420,7 +502,7 @@ export function OrderForm({
               {t.pickPinOnMap}
             </Button>
             <p className="text-xs text-slate-600">
-              {isResolvingDeliveryAddress
+              {isResolvingDeliveryAddress && !deliveryLocationValue.trim()
                 ? language === "th"
                   ? "กำลังค้นหาที่อยู่..."
                   : "Looking up address..."
