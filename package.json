@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node scripts/seed.mjs",
+    "clear-orders": "node scripts/clear-orders.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

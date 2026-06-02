@@ -109,12 +109,32 @@ export function AdminDashboard({
       return;
     }
     setSearchParams({ section }, { replace: true });
+    if (section === "orders") {
+      window.setTimeout(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      }, 80);
+    }
+  };
+
+  const handleGoToOrder = (orderId: string): void => {
+    setSetupScrollTarget(null);
+    setActiveSection("orders");
+    setSearchParams({ section: "orders", order: orderId }, { replace: true });
   };
 
   const handleOpenPrepTools = (): void => {
     setActiveSection("setup");
     setSetupScrollTarget("prep");
     setSearchParams({ section: "setup" }, { replace: true });
+  };
+
+  const handleGoToOrders = (): void => {
+    setSetupScrollTarget(null);
+    setActiveSection("orders");
+    setSearchParams({ section: "orders" }, { replace: true });
+    window.setTimeout(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    }, 80);
   };
 
   useEffect(() => {
@@ -209,6 +229,7 @@ export function AdminDashboard({
       {activeSection === "today" ? (
         <TodayPanel
           language={language}
+          publicOrderingEnabled={publicOrderingEnabled}
           settings={settings}
           stock={stock}
           products={products}
@@ -216,6 +237,8 @@ export function AdminDashboard({
           t={t}
           onToast={showToast}
           onNavigate={handleSelectSection}
+          onGoToOrders={handleGoToOrders}
+          onGoToOrder={handleGoToOrder}
           onOpenPrepTools={handleOpenPrepTools}
         />
       ) : null}
@@ -249,7 +272,12 @@ export function AdminDashboard({
             onToast={showToast}
           />
           <CustomersPanel customers={customers} language={language} onToast={showToast} />
-          <SettingsPanel settings={settings} t={t} onToast={showToast} />
+          <SettingsPanel
+            settings={settings}
+            publicOrderingEnabled={publicOrderingEnabled}
+            t={t}
+            onToast={showToast}
+          />
           <BankDetailsPanel settings={settings} t={t} onToast={showToast} />
           <div ref={prepToolsRef} className="scroll-mt-4">
             <ShoppingPrepPanel language={language} orders={orders} products={products} onToast={showToast} />

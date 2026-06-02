@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
@@ -62,11 +63,191 @@ function getStatusBadgeClass(status: OrderStatus): string {
   return "bg-slate-200 text-slate-700";
 }
 
+function OrderFieldLabel({ children }: { children: string }): JSX.Element {
+  return <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{children}</p>;
+}
+
 function getOrderItemSummary(order: OrderDoc & { id: string }, language: Language): string {
   const itemLabels = order.itemSnapshot
     .filter((item) => item.quantity > 0)
     .map((item) => `${item.quantity} ${language === "th" ? item.thaiLabel : item.label}`);
   return itemLabels.join(", ");
+}
+
+interface OrderDetailExpandProps {
+  order: OrderDoc & { id: string };
+  language: Language;
+  t: Translation;
+  statusLabels: Record<OrderStatus, string>;
+  statuses: OrderStatus[];
+  nextStatus: OrderStatus | undefined;
+  nextActionLabel: string | null;
+  savingStatusId: string | null;
+  restoreMap: Record<string, boolean>;
+  resolvingLocationOrderId: string | null;
+  onAdvanceStatus: (orderId: string, status: OrderStatus) => void;
+  onStatusChange: (orderId: string, status: OrderStatus) => void;
+  onCopy: (value: string, label: string) => void;
+  onOpenMaps: (order: OrderDoc & { id: string }) => void;
+  onCancel: (orderId: string, restoreStock: boolean) => void;
+  onRestoreMapChange: (orderId: string, restoreStock: boolean) => void;
+  onPickPin: (orderId: string) => void;
+}
+
+function OrderDetailExpand({
+  order,
+  language,
+  t,
+  statusLabels,
+  statuses,
+  nextStatus,
+  nextActionLabel,
+  savingStatusId,
+  restoreMap,
+  resolvingLocationOrderId,
+  onAdvanceStatus,
+  onStatusChange,
+  onCopy,
+  onOpenMaps,
+  onCancel,
+  onRestoreMapChange,
+  onPickPin,
+}: OrderDetailExpandProps): JSX.Element {
+  const isSaving = savingStatusId === order.id;
+
+  return (
+    <div className="mt-4 space-y-4 border-t border-brand-gold/30 pt-4">
+      <div className="rounded-lg border border-brand-gold/30 bg-white p-3.5">
+        <OrderFieldLabel>{language === "th" ? "รายการสินค้า" : "Items"}</OrderFieldLabel>
+        <div className="mt-2 space-y-2">
+          {order.itemSnapshot
+            .filter((item) => item.quantity > 0)
+            .map((item) => (
+              <div key={`${item.productId}-${item.label}`} className="flex justify-between gap-3 text-sm text-slate-800">
+                <span>
+                  {item.quantity} x {language === "th" ? item.thaiLabel : item.label}
+                </span>
+                <span className="shrink-0 font-medium">{formatTHB(item.lineTotal)} THB</span>
+              </div>
+            ))}
+        </div>
+        <p className="mt-3 border-t border-brand-gold/20 pt-2 text-right text-sm font-semibold text-brand-redDark">
+          {t.total}: {formatTHB(order.calculated.total)} THB
+        </p>
+      </div>
+
+      <div>
+        <OrderFieldLabel>{language === "th" ? "ติดต่อและจัดส่ง" : "Contact & delivery"}</OrderFieldLabel>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <Button type="button" fullWidth size="compact" variant="secondary" onClick={() => window.open(`tel:${order.customer.phone}`)}>
+            {language === "th" ? "โทรลูกค้า" : "Call customer"}
+          </Button>
+          <Button
+            type="button"
+            fullWidth
+            size="compact"
+            variant="secondary"
+            onClick={() => void onCopy(order.customer.phone, language === "th" ? "เบอร์โทร" : "Phone")}
+          >
+            {language === "th" ? "คัดลอกเบอร์" : "Copy phone"}
+          </Button>
+          <Button
+            type="button"
+            fullWidth
+            size="compact"
+            variant="secondary"
+            onClick={() => void onCopy(order.customer.deliveryLocation, language === "th" ? "ที่อยู่" : "Address")}
+          >
+            {language === "th" ? "คัดลอกที่อยู่" : "Copy address"}
+          </Button>
+          <Button type="button" fullWidth size="compact" variant="secondary" onClick={() => onOpenMaps(order)}>
+            {language === "th" ? "เปิดแผนที่" : "Open map"}
+          </Button>
+          <div className="col-span-2">
+            <Button
+              type="button"
+              fullWidth
+              size="compact"
+              variant="secondary"
+              onClick={() => onPickPin(order.id)}
+              disabled={resolvingLocationOrderId === order.id}
+            >
+              {resolvingLocationOrderId === order.id
+                ? language === "th"
+                  ? "กำลังค้นหาที่อยู่..."
+                  : "Looking up address..."
+                : t.pickPinOnMap}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {nextStatus && nextActionLabel ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-3.5">
+          <p className="mb-2 text-sm text-emerald-900">
+            {language === "th"
+              ? `ขั้นตอนถัดไป: ${statusLabels[order.status]} → ${statusLabels[nextStatus]}`
+              : `Next step: ${statusLabels[order.status]} → ${statusLabels[nextStatus]}`}
+          </p>
+          <Button
+            type="button"
+            fullWidth
+            variant="success"
+            disabled={isSaving}
+            onClick={() => onAdvanceStatus(order.id, nextStatus)}
+          >
+            {isSaving ? (
+              <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent align-middle" />
+            ) : null}
+            {nextActionLabel}
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3.5">
+        <Select
+          label={language === "th" ? "เปลี่ยนสถานะด้วยตนเอง" : "Change status manually"}
+          value={order.status}
+          disabled={isSaving}
+          options={statuses.map((status) => ({ value: status, label: statusLabels[status] }))}
+          onChange={(event) => {
+            const next = event.target.value as OrderStatus;
+            if (next === order.status) {
+              return;
+            }
+            onStatusChange(order.id, next);
+          }}
+        />
+        {isSaving ? (
+          <p className="mt-1 text-xs text-slate-500">
+            {language === "th" ? "กำลังบันทึกสถานะ..." : "Saving status..."}
+          </p>
+        ) : null}
+      </div>
+
+      {order.status !== "completed" && order.status !== "cancelled" ? (
+        <div className="space-y-2 rounded-lg border border-red-200 bg-red-50 p-3.5">
+          <label className="flex items-center gap-2 text-sm text-red-950">
+            <input
+              type="checkbox"
+              checked={restoreMap[order.id] ?? true}
+              onChange={(event) => onRestoreMapChange(order.id, event.target.checked)}
+            />
+            {t.restoreStockOnCancel}
+          </label>
+          <Button
+            type="button"
+            fullWidth
+            size="compact"
+            variant="danger"
+            onClick={() => onCancel(order.id, restoreMap[order.id] ?? true)}
+          >
+            {t.cancelOrderLabel}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function getNextActionLabel(status: OrderStatus, language: Language): string | null {
@@ -86,6 +267,9 @@ function getNextActionLabel(status: OrderStatus, language: Language): string | n
 }
 
 export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPanelProps): JSX.Element {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusOrderId = searchParams.get("order");
+  const handledFocusOrderIdRef = useRef<string | null>(null);
   const [restoreMap, setRestoreMap] = useState<Record<string, boolean>>({});
   const [savingStatusId, setSavingStatusId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -96,6 +280,43 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
   const [pickingOrderId, setPickingOrderId] = useState<string | null>(null);
   const [resolvingLocationOrderId, setResolvingLocationOrderId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!focusOrderId || handledFocusOrderIdRef.current === focusOrderId) {
+      return;
+    }
+    const order = orders.find((entry) => entry.id === focusOrderId);
+    if (!order) {
+      return;
+    }
+
+    handledFocusOrderIdRef.current = focusOrderId;
+    setStatusFilter(order.status);
+    setSelectedOrderId(order.id);
+    setSearch("");
+    setDateRange("all");
+    setPaymentFilter("all");
+
+    const timeoutId = window.setTimeout(() => {
+      document.getElementById(`admin-order-${order.id}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("order");
+          return next;
+        },
+        { replace: true },
+      );
+      handledFocusOrderIdRef.current = null;
+    }, 150);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [focusOrderId, orders, setSearchParams]);
 
   const statusLabels: Record<OrderStatus, string> = {
     new: t.statusNew,
@@ -164,8 +385,6 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
     });
   }, [dateRange, orders, paymentFilter, search, showArchived, statusFilter]);
 
-  const selectedOrder = selectedOrderId ? orders.find((order) => order.id === selectedOrderId) : null;
-
   const dispatchAddress = settings.dispatchPoint?.address?.trim() ?? "";
   const dispatchCoords =
     settings.dispatchPoint?.lat !== undefined && settings.dispatchPoint?.lng !== undefined
@@ -190,10 +409,18 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
   );
 
   const handleOrderStatusChange = async (orderId: string, status: OrderStatus): Promise<void> => {
+    const currentOrder = orders.find((order) => order.id === orderId);
+    if (currentOrder?.status === status) {
+      return;
+    }
     setSavingStatusId(orderId);
     try {
       await setOrderStatus(orderId, status);
-      onToast(t.toastOrderStatusUpdated, "success");
+      const statusLabel = statusLabels[status];
+      onToast(
+        language === "th" ? `อัปเดตเป็น ${statusLabel} แล้ว` : `Status updated to ${statusLabel}.`,
+        "success",
+      );
     } catch (error) {
       onToast(getAdminErrorMessage(error, t), "error");
     } finally {
@@ -305,6 +532,16 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  const handleToggleOrderDetails = (orderId: string, element: HTMLElement): void => {
+    const isClosing = selectedOrderId === orderId;
+    setSelectedOrderId(isClosing ? null : orderId);
+    if (!isClosing) {
+      window.requestAnimationFrame(() => {
+        element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    }
+  };
+
   return (
     <Card title={language === "th" ? "ออเดอร์" : "Orders"}>
       <div className="mb-3 space-y-2 rounded-lg border border-brand-gold/30 bg-white/70 p-3">
@@ -408,45 +645,134 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
         {visibleOrders.map((order) => {
           const nextStatus = nextStatusByStatus[order.status];
           const nextActionLabel = getNextActionLabel(order.status, language);
+          const isExpanded = selectedOrderId === order.id;
           return (
-            <article key={order.id} className="rounded-xl border border-brand-gold/30 bg-white p-3 shadow-sm">
+            <article
+              key={order.id}
+              id={`admin-order-${order.id}`}
+              className={`scroll-mt-4 rounded-xl border bg-white p-4 shadow-sm ${
+                isExpanded ? "border-brand-red/40 ring-1 ring-brand-red/20" : "border-brand-gold/30"
+              }`}
+            >
               <button
                 type="button"
-                onClick={() => setSelectedOrderId(order.id)}
+                aria-expanded={isExpanded}
+                onClick={(event) => handleToggleOrderDetails(order.id, event.currentTarget.closest("article") ?? event.currentTarget)}
                 className="block w-full text-left"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-brand-redDark">{order.orderRef}</p>
-                      <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${getStatusBadgeClass(order.status)}`}>
-                        {statusLabels[order.status]}
-                      </span>
-                      {order.customer.notes ? (
-                        <span className="rounded-full bg-brand-cream px-2 py-1 text-[10px] text-brand-redDark">
-                          {language === "th" ? "มีโน้ต" : "Notes"}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1 space-y-2.5">
+                    <div>
+                      <OrderFieldLabel>{language === "th" ? "ออเดอร์" : "Order"}</OrderFieldLabel>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                        <p className="text-base font-bold text-brand-redDark">{order.orderRef}</p>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${getStatusBadgeClass(order.status)}`}
+                        >
+                          {statusLabels[order.status]}
                         </span>
-                      ) : null}
+                        {order.customer.notes ? (
+                          <span className="rounded-full bg-brand-cream px-2.5 py-0.5 text-xs font-medium text-brand-redDark">
+                            {language === "th" ? "มีโน้ต" : "Notes"}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
-                    <p className="mt-1 text-sm font-medium text-slate-800">{order.customer.name}</p>
-                    <p className="text-xs text-slate-600">{order.customer.phone}</p>
+                    <div>
+                      <OrderFieldLabel>{language === "th" ? "ลูกค้า" : "Customer"}</OrderFieldLabel>
+                      <p className="mt-0.5 text-sm font-semibold text-slate-900">{order.customer.name}</p>
+                    </div>
+                    <div>
+                      <OrderFieldLabel>{language === "th" ? "เบอร์โทร" : "Phone"}</OrderFieldLabel>
+                      <p className="mt-0.5 text-sm text-slate-700">{order.customer.phone}</p>
+                    </div>
+                    <div>
+                      <OrderFieldLabel>{language === "th" ? "ที่อยู่จัดส่ง" : "Address"}</OrderFieldLabel>
+                      <p
+                        className={`mt-0.5 text-sm leading-relaxed text-slate-700 ${
+                          isExpanded ? "whitespace-pre-wrap break-words" : "truncate"
+                        }`}
+                      >
+                        {order.customer.deliveryLocation}
+                      </p>
+                    </div>
+                    {isExpanded && order.customer.notes ? (
+                      <div>
+                        <OrderFieldLabel>{language === "th" ? "โน้ต" : "Note"}</OrderFieldLabel>
+                        <p className="mt-0.5 rounded-lg border border-brand-gold/30 bg-brand-cream/50 p-2.5 text-sm leading-relaxed text-slate-700">
+                          {order.customer.notes}
+                        </p>
+                      </div>
+                    ) : null}
+                    <div>
+                      <OrderFieldLabel>{language === "th" ? "สรุปรายการ" : "Order summary"}</OrderFieldLabel>
+                      <p className={`mt-0.5 text-sm leading-relaxed text-slate-700 ${isExpanded ? "" : "line-clamp-2"}`}>
+                        {getOrderItemSummary(order, language)}
+                      </p>
+                    </div>
+                    <div>
+                      <OrderFieldLabel>{language === "th" ? "การชำระเงิน" : "Payment"}</OrderFieldLabel>
+                      <p className="mt-0.5 text-sm text-slate-700">
+                        {order.paymentMethod === "bank_transfer" ? t.bankTransferOnDelivery : t.cashOnDelivery}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-brand-redDark">{formatTHB(order.calculated.total)} THB</p>
-                    <p className="text-[10px] text-slate-500">{formatDateTime(order.createdAt)}</p>
+                  <div className="shrink-0 text-right">
+                    <p className="text-lg font-bold text-brand-redDark">{formatTHB(order.calculated.total)} THB</p>
+                    <p className="mt-1 text-xs text-slate-500">{formatDateTime(order.createdAt)}</p>
+                    <p className="mt-2 text-xs font-semibold text-brand-gold">
+                      {isExpanded
+                        ? language === "th"
+                          ? "ย่อรายละเอียด"
+                          : "Hide details"
+                        : language === "th"
+                          ? "ดูรายละเอียด"
+                          : "View details"}
+                    </p>
                   </div>
                 </div>
-                <p className="mt-2 truncate text-xs text-slate-600">{order.customer.deliveryLocation}</p>
-                <p className="mt-1 line-clamp-2 text-xs text-slate-700">{getOrderItemSummary(order, language)}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {order.paymentMethod === "bank_transfer" ? t.bankTransferOnDelivery : t.cashOnDelivery}
-                </p>
               </button>
-              {nextStatus && nextActionLabel ? (
+              {isExpanded ? (
+                <OrderDetailExpand
+                  order={order}
+                  language={language}
+                  t={t}
+                  statusLabels={statusLabels}
+                  statuses={statuses}
+                  nextStatus={nextStatus}
+                  nextActionLabel={nextActionLabel}
+                  savingStatusId={savingStatusId}
+                  restoreMap={restoreMap}
+                  resolvingLocationOrderId={resolvingLocationOrderId}
+                  onAdvanceStatus={(orderId, status) => {
+                    void handleOrderStatusChange(orderId, status);
+                  }}
+                  onStatusChange={(orderId, status) => {
+                    void handleOrderStatusChange(orderId, status);
+                  }}
+                  onCopy={(value, label) => {
+                    void handleCopy(value, label);
+                  }}
+                  onOpenMaps={openOrderInMaps}
+                  onCancel={(orderId, restoreStock) => {
+                    void handleCancelOrder(orderId, restoreStock);
+                  }}
+                  onRestoreMapChange={(orderId, restoreStock) => {
+                    setRestoreMap((prev) => ({
+                      ...prev,
+                      [orderId]: restoreStock,
+                    }));
+                  }}
+                  onPickPin={setPickingOrderId}
+                />
+              ) : null}
+              {!isExpanded && nextStatus && nextActionLabel ? (
                 <div className="mt-3">
                   <Button
+                    type="button"
                     fullWidth
                     size="compact"
+                    variant="success"
                     onClick={() => void handleOrderStatusChange(order.id, nextStatus)}
                     disabled={savingStatusId === order.id}
                   >
@@ -462,202 +788,6 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
         })}
         {visibleOrders.length === 0 ? <p className="text-sm text-slate-500">{t.noOrdersInView}</p> : null}
       </div>
-
-      {selectedOrder ? (
-        <div className="fixed inset-0 z-40 flex items-end bg-slate-950/40 p-0 sm:items-center sm:p-4">
-          <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-2xl sm:mx-auto sm:max-w-2xl sm:rounded-2xl">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs text-slate-500">{language === "th" ? "รายละเอียดออเดอร์" : "Order details"}</p>
-                <h3 className="text-xl font-bold text-brand-redDark">{selectedOrder.orderRef}</h3>
-              </div>
-              <Button size="compact" variant="secondary" onClick={() => setSelectedOrderId(null)}>
-                {language === "th" ? "ปิด" : "Close"}
-              </Button>
-            </div>
-
-            <div className="space-y-3 text-sm">
-              <div className="rounded-lg border border-brand-gold/30 bg-brand-cream/40 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-semibold text-brand-redDark">{selectedOrder.customer.name}</p>
-                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${getStatusBadgeClass(selectedOrder.status)}`}>
-                    {statusLabels[selectedOrder.status]}
-                  </span>
-                </div>
-                <p>{selectedOrder.customer.phone}</p>
-                <p>{selectedOrder.customer.deliveryLocation}</p>
-                {selectedOrder.customer.notes ? (
-                  <p className="mt-2 rounded-lg bg-white p-2 text-xs text-slate-700">
-                    {selectedOrder.customer.notes}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button size="compact" variant="secondary" onClick={() => window.open(`tel:${selectedOrder.customer.phone}`)}>
-                  {language === "th" ? "โทรหาลูกค้า" : "Call customer"}
-                </Button>
-                <Button
-                  size="compact"
-                  variant="secondary"
-                  onClick={() => void handleCopy(selectedOrder.customer.phone, language === "th" ? "เบอร์โทร" : "Phone")}
-                >
-                  {language === "th" ? "คัดลอกเบอร์" : "Copy phone"}
-                </Button>
-                <Button
-                  size="compact"
-                  variant="secondary"
-                  onClick={() =>
-                    void handleCopy(
-                      selectedOrder.customer.deliveryLocation,
-                      language === "th" ? "ที่อยู่" : "Address",
-                    )
-                  }
-                >
-                  {language === "th" ? "คัดลอกที่อยู่" : "Copy address"}
-                </Button>
-                <Button size="compact" variant="secondary" onClick={() => openOrderInMaps(selectedOrder)}>
-                  {language === "th" ? "เปิดแผนที่" : "Open map"}
-                </Button>
-              </div>
-
-              <div className="rounded-lg border border-slate-200 p-3">
-                <p className="mb-2 font-semibold text-brand-redDark">{language === "th" ? "รายการสินค้า" : "Items"}</p>
-                <div className="space-y-1">
-                  {selectedOrder.itemSnapshot.map((item) => (
-                    <div key={`${item.productId}-${item.label}`} className="flex justify-between gap-3 text-xs">
-                      <span>
-                        {item.quantity} x {language === "th" ? item.thaiLabel : item.label}
-                      </span>
-                      <span>{formatTHB(item.lineTotal)} THB</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                <p className="rounded-lg border border-slate-200 p-2">
-                  <span className="block text-slate-500">{language === "th" ? "น้ำจิ้มที่รวม" : "Included sauces"}</span>
-                  {selectedOrder.calculated.includedSauce}
-                </p>
-                <p className="rounded-lg border border-slate-200 p-2">
-                  <span className="block text-slate-500">{language === "th" ? "น้ำจิ้มเพิ่ม" : "Extra sauces"}</span>
-                  {selectedOrder.calculated.extraSauce}
-                </p>
-                <p className="rounded-lg border border-slate-200 p-2">
-                  <span className="block text-slate-500">{t.totalSauce}</span>
-                  {selectedOrder.calculated.totalSauce}
-                </p>
-                <p className="rounded-lg border border-slate-200 p-2">
-                  <span className="block text-slate-500">{language === "th" ? "หักสต็อก" : "Hoi deducted"}</span>
-                  {selectedOrder.calculated.hoiGramsDeducted}g
-                </p>
-              </div>
-
-              {selectedOrder.calculated.packagingDeducted ? (
-                <div className="rounded-lg border border-slate-200 p-3 text-xs">
-                  <p className="font-semibold text-brand-redDark">
-                    {language === "th" ? "บรรจุภัณฑ์ที่หัก" : "Packaging deducted"}
-                  </p>
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    <p>
-                      <span className="block text-slate-500">{language === "th" ? "ชุดใหญ่" : "Regular"}</span>
-                      {selectedOrder.calculated.packagingDeducted.regularPacks}
-                    </p>
-                    <p>
-                      <span className="block text-slate-500">{language === "th" ? "ชุดเล็ก" : "Small"}</span>
-                      {selectedOrder.calculated.packagingDeducted.smallPacks}
-                    </p>
-                    <p>
-                      <span className="block text-slate-500">{language === "th" ? "น้ำจิ้ม" : "Sauce cups"}</span>
-                      {selectedOrder.calculated.packagingDeducted.sauceCups}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="rounded-lg border border-slate-200 p-3 text-xs">
-                <p>
-                  <span className="font-semibold">{t.paymentMethod}: </span>
-                  {selectedOrder.paymentMethod === "bank_transfer" ? t.bankTransferOnDelivery : t.cashOnDelivery}
-                </p>
-                <p>
-                  <span className="font-semibold">{t.total}: </span>
-                  {formatTHB(selectedOrder.calculated.total)} THB
-                </p>
-                <p>
-                  <span className="font-semibold">{language === "th" ? "ข้อความจัดส่งตอนสั่ง: " : "Delivery snapshot: "}</span>
-                  {language === "th" ? selectedOrder.deliveryMessageSnapshot.th : selectedOrder.deliveryMessageSnapshot.en}
-                </p>
-                <p>
-                  <span className="font-semibold">{language === "th" ? "สร้างเมื่อ: " : "Created: "}</span>
-                  {formatDateTime(selectedOrder.createdAt)}
-                </p>
-                <p>
-                  <span className="font-semibold">{language === "th" ? "อัปเดตล่าสุด: " : "Updated: "}</span>
-                  {formatDateTime(selectedOrder.updatedAt)}
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-slate-200 p-3">
-                <Select
-                  label={t.statusLabel}
-                  value={selectedOrder.status}
-                  options={statuses.map((status) => ({ value: status, label: statusLabels[status] }))}
-                  onChange={(event) => {
-                    void handleOrderStatusChange(selectedOrder.id, event.target.value as OrderStatus);
-                  }}
-                />
-                {savingStatusId === selectedOrder.id ? (
-                  <p className="mt-1 text-xs text-slate-500">
-                    {language === "th" ? "กำลังบันทึกสถานะ..." : "Saving status..."}
-                  </p>
-                ) : null}
-              </div>
-
-              {selectedOrder.status !== "completed" ? (
-                <div className="space-y-2 rounded-lg border border-red-100 bg-red-50 p-3">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={restoreMap[selectedOrder.id] ?? true}
-                      onChange={(event) =>
-                        setRestoreMap((prev) => ({
-                          ...prev,
-                          [selectedOrder.id]: event.target.checked,
-                        }))
-                      }
-                    />
-                    {t.restoreStockOnCancel}
-                  </label>
-                  <Button
-                    fullWidth
-                    size="compact"
-                    variant="danger"
-                    onClick={() => void handleCancelOrder(selectedOrder.id, restoreMap[selectedOrder.id] ?? true)}
-                  >
-                    {t.cancelOrderLabel}
-                  </Button>
-                </div>
-              ) : null}
-
-              <Button
-                fullWidth
-                size="compact"
-                variant="secondary"
-                onClick={() => setPickingOrderId(selectedOrder.id)}
-                disabled={resolvingLocationOrderId === selectedOrder.id}
-              >
-                {resolvingLocationOrderId === selectedOrder.id
-                  ? language === "th"
-                    ? "กำลังค้นหาที่อยู่..."
-                    : "Looking up address..."
-                  : t.pickPinOnMap}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <MapPinPicker
         isOpen={pickingOrderId !== null}

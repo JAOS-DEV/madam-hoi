@@ -10,7 +10,7 @@ import type { MainSettingsDoc } from "../../types/firestore";
 import { parseOptionalNumber } from "../../utils/firestore";
 import { reverseGeocodeAddress } from "../../utils/geocoding";
 import { getAdminErrorMessage } from "./adminToastErrors";
-import { updateSettingsPatch } from "./adminService";
+import { updateOrderingStatus, updateSettingsPatch } from "./adminService";
 
 type SupportedDeliveryTemplate = "estimated_range" | "starts_after" | "varies" | "custom";
 
@@ -42,11 +42,17 @@ function normalizeTemplate(
 
 interface SettingsPanelProps {
   settings: MainSettingsDoc;
+  publicOrderingEnabled: boolean;
   t: Translation;
   onToast: (message: string, tone: ToastTone) => void;
 }
 
-export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX.Element {
+export function SettingsPanel({
+  settings,
+  publicOrderingEnabled,
+  t,
+  onToast,
+}: SettingsPanelProps): JSX.Element {
   const [phoneNumber, setPhoneNumber] = useState(settings.phoneNumber);
   const [lineUrl, setLineUrl] = useState(settings.lineUrl ?? "");
   const [announcementTh, setAnnouncementTh] = useState(settings.announcementTh ?? settings.announcement ?? "");
@@ -68,6 +74,20 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
   const [isDispatchPickerOpen, setIsDispatchPickerOpen] = useState(false);
   const [isResolvingDispatchAddress, setIsResolvingDispatchAddress] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [orderingAction, setOrderingAction] = useState<"open" | "close" | null>(null);
+
+  const handleOrderingStatus = async (): Promise<void> => {
+    const nextOpen = !settings.orderingOpen;
+    setOrderingAction(nextOpen ? "open" : "close");
+    try {
+      await updateOrderingStatus(nextOpen);
+      onToast(nextOpen ? t.toastOrderingOpened : t.toastOrderingClosed, "success");
+    } catch (error) {
+      onToast(getAdminErrorMessage(error, t), "error");
+    } finally {
+      setOrderingAction(null);
+    }
+  };
 
   const handleSave = async (): Promise<void> => {
     setIsSavingSettings(true);
@@ -129,7 +149,44 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
   };
 
   return (
-    <Card
+    <>
+      {!publicOrderingEnabled ? (
+        <Card
+          title={t.languageToggle === "EN" ? "รับออเดอร์ลูกค้า (ออนไลน์)" : "Public customer ordering"}
+          collapsible
+          defaultCollapsed
+          collapseStorageKey="admin.section.publicOrdering"
+        >
+          <p className="text-sm text-slate-700">
+            {t.languageToggle === "EN"
+              ? "ลูกค้าทั่วไปปิดอยู่ในแอปนี้ (VITE_PUBLIC_ORDERING_ENABLED ไม่ได้เปิด) การเปิด/ปิดด้านล่างมีผลเมื่อเปิดหน้าลูกค้าอีกครั้ง"
+              : "Public ordering is off in this build (VITE_PUBLIC_ORDERING_ENABLED is not true). Open/closed below applies when you turn the customer page back on."}
+          </p>
+          <p className="mt-2 text-sm font-semibold text-brand-redDark">
+            {settings.orderingOpen
+              ? t.languageToggle === "EN"
+                ? "สถานะ: เปิดรับออเดอร์ลูกค้า"
+                : "Status: OPEN for customers"
+              : t.languageToggle === "EN"
+                ? "สถานะ: ปิดรับออเดอร์ลูกค้า"
+                : "Status: CLOSED for customers"}
+          </p>
+          <p className="mt-1 text-xs text-slate-600">
+            {t.languageToggle === "EN"
+              ? "ออเดอร์จากแอดมินไม่ถูกบล็อกเมื่อปิดรับออเดอร์"
+              : "Admin manual orders are never blocked when ordering is closed."}
+          </p>
+          <div className="mt-3">
+            <Button fullWidth variant="secondary" onClick={() => void handleOrderingStatus()} disabled={orderingAction !== null}>
+              {orderingAction !== null ? (
+                <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent align-middle" />
+              ) : null}
+              {settings.orderingOpen ? t.closeOrdering : t.openOrdering}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+      <Card
       title={t.languageToggle === "EN" ? "ธุรกิจและข้อความจัดส่ง" : "Business and delivery setup"}
       collapsible
       collapseStorageKey="admin.section.settings"
@@ -222,5 +279,6 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
         }}
       />
     </Card>
+    </>
   );
 }

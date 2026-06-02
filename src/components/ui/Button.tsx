@@ -4,7 +4,7 @@ import clsx from "clsx";
 interface ButtonProps
   extends PropsWithChildren,
     Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> {
-  variant?: "primary" | "secondary" | "danger";
+  variant?: "primary" | "secondary" | "danger" | "success";
   size?: "default" | "compact";
   fullWidth?: boolean;
 }
@@ -27,6 +27,7 @@ export function Button({
         variant === "secondary" &&
           "border border-brand-gold/40 bg-brand-cream text-brand-redDark hover:bg-amber-100",
         variant === "danger" && "bg-red-800 text-white hover:bg-red-900",
+        variant === "success" && "bg-emerald-700 text-white shadow-sm hover:bg-emerald-800",
       )}
     >
       {children}
