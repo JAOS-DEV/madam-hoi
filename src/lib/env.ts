@@ -6,6 +6,7 @@ interface AppEnv {
   firebaseMessagingSenderId: string;
   firebaseAppId: string;
   adminEmails: string[];
+  publicOrderingEnabled: boolean;
 }
 
 const requiredEnv = [
@@ -30,6 +31,7 @@ export function getEnv(): AppEnv {
     .split(",")
     .map((email: string) => email.trim().toLowerCase())
     .filter(Boolean);
+  const publicOrderingEnabled = import.meta.env.VITE_PUBLIC_ORDERING_ENABLED === "true";
 
   return {
     firebaseApiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
@@ -40,5 +42,6 @@ export function getEnv(): AppEnv {
       .VITE_FIREBASE_MESSAGING_SENDER_ID as string,
     firebaseAppId: import.meta.env.VITE_FIREBASE_APP_ID as string,
     adminEmails,
+    publicOrderingEnabled,
   };
 }

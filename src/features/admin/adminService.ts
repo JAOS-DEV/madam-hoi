@@ -13,7 +13,13 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { adminEmails, auth, db } from "../../lib/firebase";
-import type { MainSettingsDoc, OrderStatus, PackagingStock, PrepRecipeDoc } from "../../types/firestore";
+import type {
+  CustomerProfileDoc,
+  MainSettingsDoc,
+  OrderStatus,
+  PackagingStock,
+  PrepRecipeDoc,
+} from "../../types/firestore";
 import { sanitizeForFirestore } from "../../utils/firestore";
 import { cancelOrder, updateOrderStatus } from "../ordering/orderService";
 import { kgToGrams } from "../ordering/stockUtils";
@@ -134,6 +140,24 @@ export async function updateOrderLocation(
     ...(deliveryLocation ? { "customer.deliveryLocation": deliveryLocation } : {}),
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function updateCustomerProfile(
+  customerId: string,
+  patch: Pick<CustomerProfileDoc, "name" | "phone"> & {
+    email?: string;
+    defaultDeliveryLocation?: string;
+    notes?: string;
+  },
+): Promise<void> {
+  await updateDoc(doc(db, "customers", customerId), {
+    ...sanitizeForFirestore(patch),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteCustomerProfile(customerId: string): Promise<void> {
+  await deleteDoc(doc(db, "customers", customerId));
 }
 
 export async function upsertPrepRecipe(recipe: Omit<PrepRecipeDoc, "updatedAt">): Promise<void> {

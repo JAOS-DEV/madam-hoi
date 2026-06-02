@@ -5,6 +5,7 @@ import { ToastHost } from "../../components/ui/ToastHost";
 import { useToast } from "../../hooks/useToast";
 import type { Language } from "../../i18n";
 import { translations } from "../../i18n";
+import { publicOrderingEnabled } from "../../lib/firebase";
 import type { CustomerProfileDoc, MainSettingsDoc, OrderDoc, ProductDoc, StockDoc } from "../../types/firestore";
 import { logoutAdmin } from "./adminService";
 import { subscribeCustomers, subscribeOrders } from "../ordering/orderService";
@@ -16,6 +17,7 @@ import { AdminProductsPage } from "./AdminProductsPage";
 import { AdminOrderEntrySection } from "./AdminOrderEntrySection";
 import { ShoppingPrepPanel } from "./ShoppingPrepPanel";
 import { TodayPanel } from "./TodayPanel";
+import { CustomersPanel } from "./CustomersPanel";
 
 interface AdminDashboardProps {
   language: Language;
@@ -160,11 +162,13 @@ export function AdminDashboard({
             </div>
           </div>
           <div className="hidden items-center gap-2 md:flex">
-            <Link to="/" className="block">
-              <Button size="compact" variant="secondary">
-                {language === "th" ? "หน้าลูกค้า" : "Customer View"}
-              </Button>
-            </Link>
+            {publicOrderingEnabled ? (
+              <Link to="/order" className="block">
+                <Button size="compact" variant="secondary">
+                  {language === "th" ? "หน้าลูกค้า" : "Customer View"}
+                </Button>
+              </Link>
+            ) : null}
             <Button size="compact" variant="secondary" onClick={onToggleLanguage}>
               {t.languageToggle}
             </Button>
@@ -173,12 +177,14 @@ export function AdminDashboard({
             </Button>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 md:hidden">
-          <Link to="/" className="block">
-            <Button size="compact" fullWidth variant="secondary">
-              {language === "th" ? "หน้าลูกค้า" : "Customer View"}
-            </Button>
-          </Link>
+        <div className={`mt-3 grid gap-2 md:hidden ${publicOrderingEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
+          {publicOrderingEnabled ? (
+            <Link to="/order" className="block">
+              <Button size="compact" fullWidth variant="secondary">
+                {language === "th" ? "หน้าลูกค้า" : "Customer View"}
+              </Button>
+            </Link>
+          ) : null}
           <Button size="compact" fullWidth variant="secondary" onClick={onToggleLanguage}>
             {t.languageToggle}
           </Button>
@@ -242,6 +248,7 @@ export function AdminDashboard({
             showHeader={false}
             onToast={showToast}
           />
+          <CustomersPanel customers={customers} language={language} onToast={showToast} />
           <SettingsPanel settings={settings} t={t} onToast={showToast} />
           <BankDetailsPanel settings={settings} t={t} onToast={showToast} />
           <div ref={prepToolsRef} className="scroll-mt-4">

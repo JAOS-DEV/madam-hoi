@@ -17,3 +17,4 @@ const firebaseApp = initializeApp({
 export const auth = getAuth(firebaseApp);
 export const db = getFirestore(firebaseApp);
 export const adminEmails = env.adminEmails;
+export const publicOrderingEnabled = env.publicOrderingEnabled;

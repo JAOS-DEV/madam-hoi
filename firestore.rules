@@ -147,7 +147,9 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow get: if true;
       allow list: if isAdmin();
-      allow create: if isValidOrderCreate();
+      // Public customer ordering is currently disabled. To re-enable later,
+      // change this to: allow create: if isValidOrderCreate();
+      allow create: if isAdmin() && isValidOrderCreate();
       allow update: if isAdmin() &&
         request.resource.data.keys().hasAll([
           "orderRef",

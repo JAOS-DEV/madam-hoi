@@ -1,7 +1,7 @@
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { auth } from "./lib/firebase";
+import { auth, publicOrderingEnabled } from "./lib/firebase";
 import { translations, type Language } from "./i18n";
 import type { MainSettingsDoc, ProductDoc, StockDoc } from "./types/firestore";
 import { subscribeProducts, subscribeSettings, subscribeStock } from "./features/ordering/orderService";
@@ -92,7 +92,7 @@ function App(): JSX.Element {
       <Routes>
         <Route
           path="/"
-          element={
+          element={publicOrderingEnabled ? (
             <OrderPage
               language={language}
               onToggleLanguage={toggleLanguage}
@@ -101,7 +101,24 @@ function App(): JSX.Element {
               products={products}
               isInitialLoading={!settingsReady || !stockReady || !productsReady}
             />
-          }
+          ) : (
+            <Navigate to="/admin" replace />
+          )}
+        />
+        <Route
+          path="/order"
+          element={publicOrderingEnabled ? (
+            <OrderPage
+              language={language}
+              onToggleLanguage={toggleLanguage}
+              settings={settings}
+              stock={stock}
+              products={products}
+              isInitialLoading={!settingsReady || !stockReady || !productsReady}
+            />
+          ) : (
+            <Navigate to="/admin" replace />
+          )}
         />
         <Route
           path="/confirmation/:orderId"
@@ -127,7 +144,7 @@ function App(): JSX.Element {
           path="/admin/products"
           element={<Navigate to="/admin?section=products_stock" replace />}
         />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </BrowserRouter>
   );
