@@ -8,6 +8,7 @@ import type { ToastTone } from "../../hooks/useToast";
 import type { Language, Translation } from "../../i18n";
 import type { MainSettingsDoc, OrderDoc, OrderStatus } from "../../types/firestore";
 import { formatDateTime, toDateOrNull } from "../../utils/dates";
+import { reverseGeocodeAddress } from "../../utils/geocoding";
 import { formatTHB } from "../../utils/money";
 import {
   archiveAllActiveOrders,
@@ -93,6 +94,7 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
   const [paymentFilter, setPaymentFilter] = useState<"all" | "cash" | "bank_transfer">("all");
   const [dateRange, setDateRange] = useState<"all" | "day" | "week" | "month">("all");
   const [pickingOrderId, setPickingOrderId] = useState<string | null>(null);
+  const [resolvingLocationOrderId, setResolvingLocationOrderId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const statusLabels: Record<OrderStatus, string> = {
@@ -262,11 +264,22 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
   };
 
   const handleUpdateOrderLocation = async (orderId: string, location: { lat: number; lng: number }): Promise<void> => {
+    setResolvingLocationOrderId(orderId);
     try {
-      await updateOrderLocation(orderId, location);
-      onToast(t.toastLocationUpdated, "success");
+      const address = await reverseGeocodeAddress(location.lat, location.lng);
+      await updateOrderLocation(orderId, location, address ?? undefined);
+      onToast(
+        address
+          ? language === "th"
+            ? "อัปเดตพิกัดและสถานที่จัดส่งแล้ว"
+            : "Delivery pin and location updated."
+          : t.toastLocationUpdated,
+        "success",
+      );
     } catch (error) {
       onToast(getAdminErrorMessage(error, t), "error");
+    } finally {
+      setResolvingLocationOrderId(null);
     }
   };
 
@@ -628,8 +641,18 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
                 </div>
               ) : null}
 
-              <Button fullWidth size="compact" variant="secondary" onClick={() => setPickingOrderId(selectedOrder.id)}>
-                {t.pickPinOnMap}
+              <Button
+                fullWidth
+                size="compact"
+                variant="secondary"
+                onClick={() => setPickingOrderId(selectedOrder.id)}
+                disabled={resolvingLocationOrderId === selectedOrder.id}
+              >
+                {resolvingLocationOrderId === selectedOrder.id
+                  ? language === "th"
+                    ? "กำลังค้นหาที่อยู่..."
+                    : "Looking up address..."
+                  : t.pickPinOnMap}
               </Button>
             </div>
           </div>

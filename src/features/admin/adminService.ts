@@ -127,9 +127,11 @@ export async function archiveAllActiveOrders(): Promise<number> {
 export async function updateOrderLocation(
   orderId: string,
   location: { lat: number; lng: number },
+  deliveryLocation?: string,
 ): Promise<void> {
   await updateDoc(doc(db, "orders", orderId), {
     "customer.location": location,
+    ...(deliveryLocation ? { "customer.deliveryLocation": deliveryLocation } : {}),
     updatedAt: serverTimestamp(),
   });
 }

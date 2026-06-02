@@ -19,6 +19,7 @@ import type {
   ProductDoc,
   StockDoc,
 } from "../../types/firestore";
+import { reverseGeocodeAddress } from "../../utils/geocoding";
 import { gramsToKgLabel } from "./stockUtils";
 import { QuantityStepper } from "./QuantityStepper";
 import { orderSchema, type OrderSchemaInput } from "./orderSchema";
@@ -72,6 +73,7 @@ export function OrderForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
+  const [isResolvingDeliveryAddress, setIsResolvingDeliveryAddress] = useState(false);
   const [isRegularSpecial, setIsRegularSpecial] = useState(false);
   const isAdminMode = mode === "admin";
   const form = useForm<OrderSchemaInput>({
@@ -172,6 +174,39 @@ export function OrderForm({
   };
   const decrement = (key: string): void => {
     setQuantities((prev) => ({ ...prev, [key]: Math.max(0, (prev[key] ?? 0) - 1) }));
+  };
+
+  const handleMapPinConfirm = async (lat: number, lng: number): Promise<void> => {
+    form.setValue("locationLat", lat, { shouldDirty: true, shouldValidate: true });
+    form.setValue("locationLng", lng, { shouldDirty: true, shouldValidate: true });
+    setIsMapPickerOpen(false);
+    setIsResolvingDeliveryAddress(true);
+    try {
+      const address = await reverseGeocodeAddress(lat, lng);
+      if (address) {
+        form.setValue("deliveryLocation", address, { shouldDirty: true, shouldValidate: true });
+        notify(
+          language === "th" ? "อัปเดตสถานที่จัดส่งจากพินแล้ว" : "Delivery location filled from pin.",
+          "success",
+        );
+      } else {
+        notify(
+          language === "th"
+            ? "ไม่พบที่อยู่จากพินนี้ กรุณากรอกสถานที่จัดส่งเอง"
+            : "No address found for this pin. Please enter the delivery location manually.",
+          "error",
+        );
+      }
+    } catch {
+      notify(
+        language === "th"
+          ? "ค้นหาที่อยู่ไม่สำเร็จ กรุณากรอกสถานที่จัดส่งเอง"
+          : "Could not look up the address. Please enter the delivery location manually.",
+        "error",
+      );
+    } finally {
+      setIsResolvingDeliveryAddress(false);
+    }
   };
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -385,7 +420,11 @@ export function OrderForm({
               {t.pickPinOnMap}
             </Button>
             <p className="text-xs text-slate-600">
-              {Number.isFinite(selectedLat) && Number.isFinite(selectedLng)
+              {isResolvingDeliveryAddress
+                ? language === "th"
+                  ? "กำลังค้นหาที่อยู่..."
+                  : "Looking up address..."
+                : Number.isFinite(selectedLat) && Number.isFinite(selectedLng)
                 ? `Lat ${selectedLat.toFixed(6)}, Lng ${selectedLng.toFixed(6)}`
                 : language === "th"
                   ? "กรุณาปักหมุดตำแหน่งบนแผนที่"
@@ -437,9 +476,7 @@ export function OrderForm({
         initialLng={Number.isFinite(selectedLng) ? selectedLng : undefined}
         onClose={() => setIsMapPickerOpen(false)}
         onConfirm={(lat, lng) => {
-          form.setValue("locationLat", lat, { shouldDirty: true, shouldValidate: true });
-          form.setValue("locationLng", lng, { shouldDirty: true, shouldValidate: true });
-          setIsMapPickerOpen(false);
+          void handleMapPinConfirm(lat, lng);
         }}
       />
     </form>
