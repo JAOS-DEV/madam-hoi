@@ -39,6 +39,28 @@ function normalizeTemplate(
   return "estimated_range";
 }
 
+async function reverseGeocodeAddress(lat: number, lng: number): Promise<string | null> {
+  const url = new URL("https://nominatim.openstreetmap.org/reverse");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("lat", String(lat));
+  url.searchParams.set("lon", String(lng));
+  url.searchParams.set("zoom", "18");
+  url.searchParams.set("addressdetails", "1");
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const data = (await response.json()) as { display_name?: unknown };
+  return typeof data.display_name === "string" && data.display_name.trim()
+    ? data.display_name.trim()
+    : null;
+}
+
 interface SettingsPanelProps {
   settings: MainSettingsDoc;
   t: Translation;
@@ -65,6 +87,7 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
     settings.dispatchPoint?.lng !== undefined ? String(settings.dispatchPoint.lng) : "",
   );
   const [isDispatchPickerOpen, setIsDispatchPickerOpen] = useState(false);
+  const [isResolvingDispatchAddress, setIsResolvingDispatchAddress] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const handleSave = async (): Promise<void> => {
@@ -90,6 +113,39 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
       onToast(getAdminErrorMessage(error, t), "error");
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  const handleDispatchPinConfirm = async (lat: number, lng: number): Promise<void> => {
+    setDispatchLat(lat.toFixed(6));
+    setDispatchLng(lng.toFixed(6));
+    setIsDispatchPickerOpen(false);
+    setIsResolvingDispatchAddress(true);
+    try {
+      const address = await reverseGeocodeAddress(lat, lng);
+      if (address) {
+        setDispatchAddress(address);
+        onToast(
+          t.languageToggle === "EN" ? "อัปเดตที่อยู่จากพินแล้ว" : "Dispatch address filled from pin.",
+          "success",
+        );
+      } else {
+        onToast(
+          t.languageToggle === "EN"
+            ? "ไม่พบที่อยู่จากพินนี้ กรุณากรอกที่อยู่เอง"
+            : "No address found for this pin. Please enter it manually.",
+          "error",
+        );
+      }
+    } catch {
+      onToast(
+        t.languageToggle === "EN"
+          ? "ค้นหาที่อยู่ไม่สำเร็จ กรุณากรอกที่อยู่เอง"
+          : "Could not look up the address. Please enter it manually.",
+        "error",
+      );
+    } finally {
+      setIsResolvingDispatchAddress(false);
     }
   };
 
@@ -159,7 +215,13 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
             {t.pickPinOnMap}
           </Button>
           <span className="text-xs text-slate-600">
-            {dispatchLat && dispatchLng ? `Lat ${dispatchLat}, Lng ${dispatchLng}` : ""}
+            {isResolvingDispatchAddress
+              ? t.languageToggle === "EN"
+                ? "กำลังค้นหาที่อยู่..."
+                : "Looking up address..."
+              : dispatchLat && dispatchLng
+                ? `Lat ${dispatchLat}, Lng ${dispatchLng}`
+                : ""}
           </span>
         </div>
         <p className="text-xs text-slate-600">{t.routingSettingsHint}</p>
@@ -177,9 +239,7 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
         initialLng={dispatchLng.trim() ? Number(dispatchLng) : undefined}
         onClose={() => setIsDispatchPickerOpen(false)}
         onConfirm={(lat, lng) => {
-          setDispatchLat(lat.toFixed(6));
-          setDispatchLng(lng.toFixed(6));
-          setIsDispatchPickerOpen(false);
+          void handleDispatchPinConfirm(lat, lng);
         }}
       />
     </Card>
