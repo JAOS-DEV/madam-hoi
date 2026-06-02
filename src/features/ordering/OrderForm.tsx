@@ -214,7 +214,11 @@ export function OrderForm({
       onOrderSuccess(result.orderId, result.orderRef, values.paymentMethod);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to submit order.";
-      if (message.includes("STOCK_CHANGED") || message.includes("OPENER_STOCK_CHANGED")) {
+      if (
+        message.includes("STOCK_CHANGED") ||
+        message.includes("OPENER_STOCK_CHANGED") ||
+        message.includes("PACKAGING_STOCK_CHANGED")
+      ) {
         setSubmitError(t.invalidStockChange);
         notify(t.invalidStockChange, "error");
       } else {

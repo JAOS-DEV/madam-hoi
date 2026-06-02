@@ -9,9 +9,9 @@ import type { Translation } from "../../i18n";
 import type { MainSettingsDoc } from "../../types/firestore";
 import { parseOptionalNumber } from "../../utils/firestore";
 import { getAdminErrorMessage } from "./adminToastErrors";
-import { updateOrderingStatus, updateSettingsPatch } from "./adminService";
+import { updateSettingsPatch } from "./adminService";
 
-type SupportedDeliveryTemplate = "estimated_range" | "starts_after" | "varies";
+type SupportedDeliveryTemplate = "estimated_range" | "starts_after" | "varies" | "custom";
 
 function buildDispatchPoint(
   address: string,
@@ -33,7 +33,7 @@ function buildDispatchPoint(
 function normalizeTemplate(
   template: MainSettingsDoc["deliveryMessage"]["template"],
 ): SupportedDeliveryTemplate {
-  if (template === "starts_after" || template === "varies") {
+  if (template === "starts_after" || template === "varies" || template === "custom") {
     return template;
   }
   return "estimated_range";
@@ -46,6 +46,8 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX.Element {
+  const [phoneNumber, setPhoneNumber] = useState(settings.phoneNumber);
+  const [lineUrl, setLineUrl] = useState(settings.lineUrl ?? "");
   const [announcementTh, setAnnouncementTh] = useState(settings.announcementTh ?? settings.announcement ?? "");
   const [announcementEn, setAnnouncementEn] = useState(settings.announcementEn ?? settings.announcement ?? "");
   const [template, setTemplate] = useState<SupportedDeliveryTemplate>(
@@ -53,6 +55,8 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
   );
   const [startTime, setStartTime] = useState(settings.deliveryMessage.startTime ?? "19:00");
   const [endTime, setEndTime] = useState(settings.deliveryMessage.endTime ?? "22:00");
+  const [customMessageTh, setCustomMessageTh] = useState(settings.deliveryMessage.customMessageTh ?? "");
+  const [customMessageEn, setCustomMessageEn] = useState(settings.deliveryMessage.customMessageEn ?? "");
   const [dispatchAddress, setDispatchAddress] = useState(settings.dispatchPoint?.address ?? "");
   const [dispatchLat, setDispatchLat] = useState(
     settings.dispatchPoint?.lat !== undefined ? String(settings.dispatchPoint.lat) : "",
@@ -62,12 +66,13 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
   );
   const [isDispatchPickerOpen, setIsDispatchPickerOpen] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const [orderingAction, setOrderingAction] = useState<"open" | "close" | null>(null);
 
   const handleSave = async (): Promise<void> => {
     setIsSavingSettings(true);
     try {
       await updateSettingsPatch({
+        phoneNumber: phoneNumber.trim(),
+        lineUrl: lineUrl.trim(),
         announcement: (announcementEn || announcementTh || settings.announcement).trim(),
         announcementTh: announcementTh.trim(),
         announcementEn: announcementEn.trim(),
@@ -75,6 +80,8 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
           template,
           startTime,
           endTime,
+          customMessageTh: customMessageTh.trim(),
+          customMessageEn: customMessageEn.trim(),
         },
         dispatchPoint: buildDispatchPoint(dispatchAddress, dispatchLat, dispatchLng),
       });
@@ -86,45 +93,23 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
     }
   };
 
-  const handleOrderingStatus = async (open: boolean): Promise<void> => {
-    setOrderingAction(open ? "open" : "close");
-    try {
-      await updateOrderingStatus(open);
-      onToast(open ? t.toastOrderingOpened : t.toastOrderingClosed, "success");
-    } catch (error) {
-      onToast(getAdminErrorMessage(error, t), "error");
-    } finally {
-      setOrderingAction(null);
-    }
-  };
-
   return (
-    <Card title={t.adminSettingsPanelTitle} collapsible collapseStorageKey="admin.section.settings">
+    <Card
+      title={t.languageToggle === "EN" ? "ธุรกิจและข้อความจัดส่ง" : "Business and delivery setup"}
+      collapsible
+      collapseStorageKey="admin.section.settings"
+    >
       <div className="space-y-3">
-        <div className="flex gap-2">
-          <Button
-            variant={settings.orderingOpen ? "primary" : "secondary"}
-            onClick={() => void handleOrderingStatus(true)}
-            disabled={orderingAction !== null}
-            aria-busy={orderingAction === "open"}
-          >
-            {orderingAction === "open" ? (
-              <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent align-middle" />
-            ) : null}
-            {t.openOrdering}
-          </Button>
-          <Button
-            variant={!settings.orderingOpen ? "danger" : "secondary"}
-            onClick={() => void handleOrderingStatus(false)}
-            disabled={orderingAction !== null}
-            aria-busy={orderingAction === "close"}
-          >
-            {orderingAction === "close" ? (
-              <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent align-middle" />
-            ) : null}
-            {t.closeOrdering}
-          </Button>
-        </div>
+        <Input
+          label={t.languageToggle === "EN" ? "เบอร์โทรธุรกิจ" : "Business phone"}
+          value={phoneNumber}
+          onChange={(event) => setPhoneNumber(event.target.value)}
+        />
+        <Input
+          label="LINE URL"
+          value={lineUrl}
+          onChange={(event) => setLineUrl(event.target.value)}
+        />
         <Input
           label={t.announcementThaiLabel}
           value={announcementTh}
@@ -143,12 +128,27 @@ export function SettingsPanel({ settings, t, onToast }: SettingsPanelProps): JSX
             { value: "estimated_range", label: t.templateEstimatedRange },
             { value: "starts_after", label: t.templateStartsAfter },
             { value: "varies", label: t.templateVaries },
+            { value: "custom", label: t.templateCustom },
           ]}
         />
         <div className="grid gap-3 sm:grid-cols-2">
           <Input label={t.startTimeLabel} value={startTime} onChange={(event) => setStartTime(event.target.value)} />
           <Input label={t.endTimeLabel} value={endTime} onChange={(event) => setEndTime(event.target.value)} />
         </div>
+        {template === "custom" ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label={t.customThaiMessage}
+              value={customMessageTh}
+              onChange={(event) => setCustomMessageTh(event.target.value)}
+            />
+            <Input
+              label={t.customEnglishMessage}
+              value={customMessageEn}
+              onChange={(event) => setCustomMessageEn(event.target.value)}
+            />
+          </div>
+        ) : null}
         <Input
           label={t.dispatchStartPointLabel}
           value={dispatchAddress}

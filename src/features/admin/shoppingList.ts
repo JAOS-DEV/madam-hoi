@@ -1,4 +1,4 @@
-import type { OrderDoc, PrepRecipeDoc } from "../../types/firestore";
+import type { OrderDoc, PrepRecipeDoc, RecipeServingSourceConfig } from "../../types/firestore";
 
 export interface ShoppingListRow {
   ingredient: string;
@@ -7,7 +7,32 @@ export interface ShoppingListRow {
   targets: string[];
 }
 
+function getProductQuantity(productId: string | undefined, orders: Array<OrderDoc & { id: string }>): number {
+  if (!productId) {
+    return 0;
+  }
+  return orders.reduce(
+    (sum, order) =>
+      sum +
+      order.itemSnapshot
+        .filter((item) => item.productId === productId)
+        .reduce((itemSum, item) => itemSum + item.quantity, 0),
+    0,
+  );
+}
+
+function getServingsFromSource(source: RecipeServingSourceConfig, orders: Array<OrderDoc & { id: string }>): number {
+  const activeOrders = orders.filter((order) => order.status !== "cancelled");
+  if (source.type === "orders_count") {
+    return activeOrders.length;
+  }
+  return getProductQuantity(source.productId, activeOrders);
+}
+
 function getServingsForRecipe(recipe: PrepRecipeDoc, orders: Array<OrderDoc & { id: string }>): number {
+  if (recipe.servingsSources && recipe.servingsSources.length > 0) {
+    return recipe.servingsSources.reduce((sum, source) => sum + getServingsFromSource(source, orders), 0);
+  }
   const activeOrders = orders.filter((order) => order.status !== "cancelled");
   if (recipe.servingsSource === "orders_count") {
     return activeOrders.length;

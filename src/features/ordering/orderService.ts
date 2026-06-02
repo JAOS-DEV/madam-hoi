@@ -22,6 +22,7 @@ import type {
 } from "../../types/firestore";
 import type { Language } from "../../i18n";
 import type { OrderQuantities } from "../../types/firestore";
+import { getPackagingStock } from "./stockUtils";
 
 export interface SubmitOrderInput {
   customer: {
@@ -55,6 +56,7 @@ const prepRecipesCollectionRef = collection(db, "prepRecipes");
 const REGULAR_SPECIAL_KEY = "regular_special";
 const SPECIAL_EXTRA_HOI_GRAMS = 500;
 const SPECIAL_EXTRA_PRICE_THB = 100;
+const PACKAGING_STOCK_CHANGED = "PACKAGING_STOCK_CHANGED";
 
 export const subscribeSettings = (
   handler: (settings: MainSettingsDoc | null) => void,
@@ -240,12 +242,31 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
       0,
     );
     const subtotal = baseSubtotal + specialRegularCount * SPECIAL_EXTRA_PRICE_THB;
+    const regularPackagingDeducted = selectedItems
+      .filter((entry) => entry.product.id === "regular")
+      .reduce((sum, entry) => sum + entry.quantity, 0);
+    const smallPackagingDeducted = selectedItems
+      .filter((entry) => entry.product.id === "small")
+      .reduce((sum, entry) => sum + entry.quantity, 0);
+    const packagingDeducted = {
+      regularPacks: regularPackagingDeducted,
+      smallPacks: smallPackagingDeducted,
+      sauceCups: includedSauce + extraSauce,
+    };
+    const packagingStock = getPackagingStock(stock);
 
     if (sharedHoiDeducted > stock.availableHoiGrams) {
       throw new Error("STOCK_CHANGED");
     }
     if (openerDeducted > stock.openerStock) {
       throw new Error("OPENER_STOCK_CHANGED");
+    }
+    if (
+      packagingDeducted.regularPacks > packagingStock.regularPacks ||
+      packagingDeducted.smallPacks > packagingStock.smallPacks ||
+      packagingDeducted.sauceCups > packagingStock.sauceCups
+    ) {
+      throw new Error(PACKAGING_STOCK_CHANGED);
     }
     if (subtotal <= 0) {
       throw new Error("EMPTY_ORDER");
@@ -277,6 +298,7 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
           : input.quantities,
       calculated: {
         hoiGramsDeducted: sharedHoiDeducted,
+        packagingDeducted,
         includedSauce,
         extraSauce,
         totalSauce: includedSauce + extraSauce,
@@ -339,6 +361,11 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
     transaction.update(stockRef, {
       availableHoiGrams: stock.availableHoiGrams - sharedHoiDeducted,
       openerStock: stock.openerStock - openerDeducted,
+      packagingStock: {
+        regularPacks: packagingStock.regularPacks - packagingDeducted.regularPacks,
+        smallPacks: packagingStock.smallPacks - packagingDeducted.smallPacks,
+        sauceCups: packagingStock.sauceCups - packagingDeducted.sauceCups,
+      },
       updatedAt: serverTimestamp(),
     });
 
@@ -380,10 +407,21 @@ export async function cancelOrder(orderId: string, restoreStock: boolean): Promi
     const openerQty = order.itemSnapshot
       .filter((item) => item.stockType === "opener")
       .reduce((sum, item) => sum + item.quantity, 0);
+    const packagingStock = getPackagingStock(stock);
+    const packagingDeducted = order.calculated.packagingDeducted ?? {
+      regularPacks: 0,
+      smallPacks: 0,
+      sauceCups: 0,
+    };
     const stockPatch = restoreStock
       ? {
           availableHoiGrams: stock.availableHoiGrams + order.calculated.hoiGramsDeducted,
           openerStock: stock.openerStock + openerQty,
+          packagingStock: {
+            regularPacks: packagingStock.regularPacks + packagingDeducted.regularPacks,
+            smallPacks: packagingStock.smallPacks + packagingDeducted.smallPacks,
+            sauceCups: packagingStock.sauceCups + packagingDeducted.sauceCups,
+          },
           updatedAt: serverTimestamp(),
         }
       : null;

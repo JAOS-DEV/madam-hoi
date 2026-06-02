@@ -73,6 +73,13 @@ export interface MainSettingsDoc {
 export interface StockDoc {
   availableHoiGrams: number;
   openerStock: number;
+  packagingStock?: PackagingStock;
+}
+
+export interface PackagingStock {
+  regularPacks: number;
+  smallPacks: number;
+  sauceCups: number;
 }
 
 export type OrderSource = "web" | "line" | "phone" | "walk_in" | "admin_manual";
@@ -90,6 +97,12 @@ export interface CustomerProfileDoc {
 
 export type RecipeCalcMode = "per_item" | "per_batch";
 export type RecipeServingsSource = "total_sauce" | "orders_count";
+export type RecipeServingSourceType = "orders_count" | "product_quantity";
+
+export interface RecipeServingSourceConfig {
+  type: RecipeServingSourceType;
+  productId?: string;
+}
 
 export interface PrepRecipeIngredient {
   name: string;
@@ -103,6 +116,7 @@ export interface PrepRecipeDoc {
   target: string;
   calcMode: RecipeCalcMode;
   servingsSource: RecipeServingsSource;
+  servingsSources?: RecipeServingSourceConfig[];
   servingsPerBatch?: number;
   ingredients: PrepRecipeIngredient[];
   updatedAt?: unknown;
@@ -124,6 +138,7 @@ export type OrderQuantities = Record<string, number>;
 
 export interface OrderCalculated {
   hoiGramsDeducted: number;
+  packagingDeducted?: PackagingStock;
   includedSauce: number;
   extraSauce: number;
   totalSauce: number;

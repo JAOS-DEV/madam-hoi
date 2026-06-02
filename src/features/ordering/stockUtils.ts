@@ -1,4 +1,4 @@
-import type { ProductSettings } from "../../types/firestore";
+import type { PackagingStock, ProductSettings, StockDoc } from "../../types/firestore";
 
 export interface QuantityState {
   regular: number;
@@ -55,6 +55,20 @@ export function kgToGrams(kg: number): number {
 
 export function gramsToKgLabel(grams: number): string {
   return (grams / 1000).toFixed(1).replace(".0", "");
+}
+
+export const emptyPackagingStock = (): PackagingStock => ({
+  regularPacks: 0,
+  smallPacks: 0,
+  sauceCups: 0,
+});
+
+export function getPackagingStock(stock: StockDoc): PackagingStock {
+  return {
+    regularPacks: stock.packagingStock?.regularPacks ?? 0,
+    smallPacks: stock.packagingStock?.smallPacks ?? 0,
+    sauceCups: stock.packagingStock?.sauceCups ?? 0,
+  };
 }
 
 export function getMaxAddable(

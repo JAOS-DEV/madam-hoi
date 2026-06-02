@@ -63,6 +63,17 @@ service cloud.firestore {
       request.resource.data.calculated.subtotal is int &&
       request.resource.data.calculated.total is int &&
       request.resource.data.calculated.hoiGramsDeducted >= 0 &&
+      (!("packagingDeducted" in request.resource.data.calculated) ||
+        (
+          request.resource.data.calculated.packagingDeducted is map &&
+          request.resource.data.calculated.packagingDeducted.regularPacks is int &&
+          request.resource.data.calculated.packagingDeducted.smallPacks is int &&
+          request.resource.data.calculated.packagingDeducted.sauceCups is int &&
+          request.resource.data.calculated.packagingDeducted.regularPacks >= 0 &&
+          request.resource.data.calculated.packagingDeducted.smallPacks >= 0 &&
+          request.resource.data.calculated.packagingDeducted.sauceCups >= 0
+        )
+      ) &&
       request.resource.data.calculated.total >= 0 &&
       request.resource.data.deliveryMessageSnapshot is map &&
       request.resource.data.deliveryMessageSnapshot.th is string &&
@@ -84,7 +95,32 @@ service cloud.firestore {
       request.resource.data.availableHoiGrams >= 0 &&
       request.resource.data.openerStock >= 0 &&
       request.resource.data.availableHoiGrams <= resource.data.availableHoiGrams &&
-      request.resource.data.openerStock <= resource.data.openerStock;
+      request.resource.data.openerStock <= resource.data.openerStock &&
+      (!("packagingStock" in request.resource.data) ||
+        (
+          request.resource.data.packagingStock is map &&
+          request.resource.data.packagingStock.regularPacks is int &&
+          request.resource.data.packagingStock.smallPacks is int &&
+          request.resource.data.packagingStock.sauceCups is int &&
+          request.resource.data.packagingStock.regularPacks >= 0 &&
+          request.resource.data.packagingStock.smallPacks >= 0 &&
+          request.resource.data.packagingStock.sauceCups >= 0 &&
+          (
+            (
+              "packagingStock" in resource.data &&
+              request.resource.data.packagingStock.regularPacks <= resource.data.packagingStock.regularPacks &&
+              request.resource.data.packagingStock.smallPacks <= resource.data.packagingStock.smallPacks &&
+              request.resource.data.packagingStock.sauceCups <= resource.data.packagingStock.sauceCups
+            ) ||
+            (
+              !("packagingStock" in resource.data) &&
+              request.resource.data.packagingStock.regularPacks == 0 &&
+              request.resource.data.packagingStock.smallPacks == 0 &&
+              request.resource.data.packagingStock.sauceCups == 0
+            )
+          )
+        )
+      );
     }
 
     match /settings/main {

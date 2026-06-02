@@ -354,6 +354,7 @@ export function AdminProductsPage({
         title={language === "th" ? "เพิ่มสินค้าใหม่" : "Add new product"}
         collapsible
         collapseStorageKey="admin.products.new-product"
+        defaultCollapsed
       >
         <p className="mb-3 text-xs text-slate-600">
           {language === "th"
@@ -448,7 +449,7 @@ export function AdminProductsPage({
       </Card>
 
       <Card
-        title={language === "th" ? "สินค้าปัจจุบัน" : "Existing products"}
+        title={language === "th" ? "สินค้า" : "Products"}
         collapsible
         collapseStorageKey="admin.products.existing-products"
       >

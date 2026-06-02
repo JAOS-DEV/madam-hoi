@@ -13,7 +13,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { adminEmails, auth, db } from "../../lib/firebase";
-import type { MainSettingsDoc, OrderStatus, PrepRecipeDoc } from "../../types/firestore";
+import type { MainSettingsDoc, OrderStatus, PackagingStock, PrepRecipeDoc } from "../../types/firestore";
 import { sanitizeForFirestore } from "../../utils/firestore";
 import { cancelOrder, updateOrderStatus } from "../ordering/orderService";
 import { kgToGrams } from "../ordering/stockUtils";
@@ -41,15 +41,28 @@ export async function updateOrderingStatus(orderingOpen: boolean): Promise<void>
   });
 }
 
-export async function updateStock(kg: number, openerStock: number): Promise<void> {
+export async function updateStock(
+  kg: number,
+  openerStock: number,
+  packagingStock?: PackagingStock,
+): Promise<void> {
   const availableHoiGrams = kgToGrams(kg);
   if (!Number.isFinite(availableHoiGrams) || !Number.isFinite(openerStock)) {
     throw new Error("Invalid stock values.");
+  }
+  if (
+    packagingStock &&
+    (!Number.isFinite(packagingStock.regularPacks) ||
+      !Number.isFinite(packagingStock.smallPacks) ||
+      !Number.isFinite(packagingStock.sauceCups))
+  ) {
+    throw new Error("Invalid packaging stock values.");
   }
 
   await updateDoc(doc(db, "stock", "today"), {
     availableHoiGrams,
     openerStock,
+    ...(packagingStock ? { packagingStock } : {}),
     updatedAt: serverTimestamp(),
   });
 }
@@ -133,6 +146,10 @@ export async function upsertPrepRecipe(recipe: Omit<PrepRecipeDoc, "updatedAt">)
   );
 }
 
+export async function deletePrepRecipe(recipeId: string): Promise<void> {
+  await deleteDoc(doc(db, "prepRecipes", recipeId));
+}
+
 export async function seedDefaultPrepRecipes(): Promise<void> {
   await Promise.all([
     upsertPrepRecipe({
@@ -140,6 +157,10 @@ export async function seedDefaultPrepRecipes(): Promise<void> {
       target: "Sauce",
       calcMode: "per_batch",
       servingsSource: "total_sauce",
+      servingsSources: [
+        { type: "orders_count" },
+        { type: "product_quantity", productId: "extra_sauce" },
+      ],
       servingsPerBatch: 20,
       ingredients: [
         { name: "Lime", unit: "pcs", amount: 20 },
@@ -151,6 +172,10 @@ export async function seedDefaultPrepRecipes(): Promise<void> {
       target: "Salad",
       calcMode: "per_item",
       servingsSource: "orders_count",
+      servingsSources: [
+        { type: "orders_count" },
+        { type: "product_quantity", productId: "extra_salad" },
+      ],
       ingredients: [
         { name: "Cucumber", unit: "pcs", amount: 0.3 },
         { name: "Onion", unit: "pcs", amount: 0.2 },
