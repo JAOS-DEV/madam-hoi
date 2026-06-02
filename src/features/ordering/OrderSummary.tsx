@@ -2,6 +2,7 @@ import { Card } from "../../components/ui/Card";
 import { formatTHB } from "../../utils/money";
 import type { Language, Translation } from "../../i18n";
 import type { OrderQuantities, ProductDoc } from "../../types/firestore";
+import { SPECIAL_EXTRA_PRICE_THB } from "./regularSpecial";
 
 interface OrderSummaryProps {
   language: Language;
@@ -11,7 +12,67 @@ interface OrderSummaryProps {
   t: Translation;
   paymentLabel: string;
 }
-const SPECIAL_EXTRA_PRICE_THB = 100;
+
+interface SummaryLine {
+  key: string;
+  label: string;
+  quantity: number;
+  lineTotal: number;
+}
+
+function buildSummaryLines(
+  products: ProductDoc[],
+  quantities: OrderQuantities,
+  specialRegularCount: number,
+  language: Language,
+): SummaryLine[] {
+  const lines: SummaryLine[] = [];
+
+  products.forEach((product) => {
+    const quantity = quantities[product.id] ?? 0;
+    if (quantity <= 0) {
+      return;
+    }
+
+    const baseLabel = language === "th" ? product.thaiLabel : product.label;
+
+    if (product.id === "regular") {
+      const specialQty = Math.min(specialRegularCount, quantity);
+      const standardQty = quantity - specialQty;
+
+      if (standardQty > 0) {
+        lines.push({
+          key: "regular-standard",
+          label: baseLabel,
+          quantity: standardQty,
+          lineTotal: standardQty * product.price,
+        });
+      }
+
+      if (specialQty > 0) {
+        lines.push({
+          key: "regular-special",
+          label:
+            language === "th"
+              ? `${baseLabel} (พิเศษ +500 กรัม)`
+              : `${baseLabel} (special +500g)`,
+          quantity: specialQty,
+          lineTotal: specialQty * (product.price + SPECIAL_EXTRA_PRICE_THB),
+        });
+      }
+      return;
+    }
+
+    lines.push({
+      key: product.id,
+      label: baseLabel,
+      quantity,
+      lineTotal: quantity * product.price,
+    });
+  });
+
+  return lines;
+}
 
 export function OrderSummary({
   language,
@@ -21,47 +82,24 @@ export function OrderSummary({
   t,
   paymentLabel,
 }: OrderSummaryProps): JSX.Element {
-  const selectedProducts = products
-    .map((product) => ({ product, quantity: quantities[product.id] ?? 0 }))
-    .filter((entry) => entry.quantity > 0);
-  const includedSauce = selectedProducts.reduce(
-    (sum, entry) => sum + entry.quantity * entry.product.includedSauce,
-    0,
-  );
-  const extraSauce = selectedProducts
-    .filter((entry) => entry.product.category === "sauce" && entry.product.includedSauce === 0)
-    .reduce((sum, entry) => sum + entry.quantity, 0);
-  const baseTotal = selectedProducts.reduce((sum, entry) => sum + entry.quantity * entry.product.price, 0);
-  const total = baseTotal + specialRegularCount * SPECIAL_EXTRA_PRICE_THB;
+  const summaryLines = buildSummaryLines(products, quantities, specialRegularCount, language);
+  const total = summaryLines.reduce((sum, line) => sum + line.lineTotal, 0);
 
   return (
     <Card title={t.orderSummary}>
-      <div className="space-y-1 rounded-lg bg-amber-50/60 p-3 text-sm">
-        {selectedProducts.map((entry) => (
-          <p key={entry.product.id}>
-            {(language === "th" ? entry.product.thaiLabel : entry.product.label)} x {entry.quantity} ={" "}
-            {formatTHB(entry.quantity * entry.product.price)} THB
-          </p>
+      <ul className="space-y-2 text-sm leading-snug">
+        {summaryLines.map((line) => (
+          <li key={line.key} className="flex items-start gap-2">
+            <span className="w-5 shrink-0 text-right font-medium tabular-nums text-slate-700">
+              {line.quantity}
+            </span>
+            <span className="min-w-0 flex-1 font-medium text-brand-redDark">{line.label}</span>
+            <span className="shrink-0 pl-1 text-right font-semibold tabular-nums text-brand-redDark">
+              {formatTHB(line.lineTotal)} THB
+            </span>
+          </li>
         ))}
-        {specialRegularCount > 0 ? (
-          <p>
-            {language === "th"
-              ? `พิเศษ x${specialRegularCount} (+500 กรัมหอย/ชุด) = +${specialRegularCount * SPECIAL_EXTRA_PRICE_THB} THB`
-              : `Special x${specialRegularCount} (+500g hoi each) = +${specialRegularCount * SPECIAL_EXTRA_PRICE_THB} THB`}
-          </p>
-        ) : null}
-      </div>
-      <div className="mt-3 space-y-1 rounded-lg border border-brand-gold/30 bg-white p-3 text-sm">
-        <p>
-          {t.includedSauce}: {includedSauce}
-        </p>
-        <p>
-          {t.extraSauce}: {extraSauce}
-        </p>
-        <p>
-          {t.totalSauce}: {includedSauce + extraSauce}
-        </p>
-      </div>
+      </ul>
       <div className="mt-3 rounded-lg bg-brand-red p-3 text-white">
         <p className="text-base font-bold">
           {t.total}: {formatTHB(total)} THB
