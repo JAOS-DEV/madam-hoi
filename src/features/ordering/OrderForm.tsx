@@ -24,7 +24,16 @@ import { gramsToKgLabel } from "./stockUtils";
 import { QuantityStepper } from "./QuantityStepper";
 import { orderSchema, type OrderSchemaInput } from "./orderSchema";
 import { submitOrder } from "./orderService";
+import { RegularSpecialPicker } from "./RegularSpecialPicker";
 import { OrderSummary } from "./OrderSummary";
+import {
+  buildQuantitiesWithSpecial,
+  canEnableAnotherSpecialSlot,
+  countRegularSpecialSlots,
+  SPECIAL_EXTRA_HOI_GRAMS,
+  SPECIAL_EXTRA_PRICE_THB,
+  syncRegularSpecialSlots,
+} from "./regularSpecial";
 
 interface OrderFormProps {
   language: Language;
@@ -40,14 +49,14 @@ interface OrderFormProps {
 
 interface AdminOrderDraft {
   quantities: OrderQuantities;
-  isRegularSpecial: boolean;
+  regularSpecialSlots?: boolean[];
+  /** @deprecated Legacy single checkbox; migrated to one special slot on restore. */
+  isRegularSpecial?: boolean;
   values: Partial<OrderSchemaInput>;
 }
 
 const createEmptyQuantities = (products: ProductDoc[]): OrderQuantities =>
   Object.fromEntries(products.map((product) => [product.id, 0]));
-const SPECIAL_EXTRA_HOI_GRAMS = 500;
-const SPECIAL_EXTRA_PRICE_THB = 100;
 const ADMIN_ORDER_DRAFT_KEY = "madam-hoi.admin-order-draft";
 
 function readAdminOrderDraft(): AdminOrderDraft | null {
@@ -110,7 +119,7 @@ export function OrderForm({
   const [submitError, setSubmitError] = useState("");
   const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
   const [isResolvingDeliveryAddress, setIsResolvingDeliveryAddress] = useState(false);
-  const [isRegularSpecial, setIsRegularSpecial] = useState(false);
+  const [regularSpecialSlots, setRegularSpecialSlots] = useState<boolean[]>([]);
   const isAdminMode = mode === "admin";
   const [hasRestoredAdminDraft, setHasRestoredAdminDraft] = useState(false);
   const form = useForm<OrderSchemaInput>({
@@ -158,7 +167,14 @@ export function OrderForm({
         nextQuantities[product.id] = draft.quantities[product.id] ?? 0;
       });
       setQuantities(nextQuantities);
-      setIsRegularSpecial(draft.isRegularSpecial);
+      const regularQty = nextQuantities.regular ?? 0;
+      if (Array.isArray(draft.regularSpecialSlots)) {
+        setRegularSpecialSlots(syncRegularSpecialSlots(draft.regularSpecialSlots, regularQty));
+      } else if (draft.isRegularSpecial && regularQty > 0) {
+        setRegularSpecialSlots(syncRegularSpecialSlots([true], regularQty));
+      } else {
+        setRegularSpecialSlots(syncRegularSpecialSlots([], regularQty));
+      }
       form.reset({
         name: draft.values.name ?? "",
         phone: draft.values.phone ?? "",
@@ -175,12 +191,12 @@ export function OrderForm({
     setHasRestoredAdminDraft(true);
   }, [activeProducts, form, hasRestoredAdminDraft, isAdminMode]);
 
+  const regularQty = quantities.regular ?? 0;
+  const specialRegularCount = countRegularSpecialSlots(regularSpecialSlots);
+
   useEffect(() => {
-    const regularQty = quantities.regular ?? 0;
-    if (regularQty <= 0) {
-      setIsRegularSpecial(false);
-    }
-  }, [quantities.regular]);
+    setRegularSpecialSlots((prev) => syncRegularSpecialSlots(prev, regularQty));
+  }, [regularQty]);
 
   useEffect(() => {
     form.setValue("orderSource", isAdminMode ? "admin_manual" : "web");
@@ -202,16 +218,22 @@ export function OrderForm({
       .filter((item) => item.product.category === "sauce" && item.product.includedSauce === 0)
       .reduce((sum, item) => sum + item.qty, 0);
     const baseTotal = selected.reduce((sum, item) => sum + item.qty * item.product.price, 0);
-    const total = baseTotal + (isRegularSpecial ? SPECIAL_EXTRA_PRICE_THB : 0);
+    const total = baseTotal + specialRegularCount * SPECIAL_EXTRA_PRICE_THB;
     return {
-      hoiGramsDeducted: hoiGramsDeducted + (isRegularSpecial ? SPECIAL_EXTRA_HOI_GRAMS : 0),
+      hoiGramsDeducted: hoiGramsDeducted + specialRegularCount * SPECIAL_EXTRA_HOI_GRAMS,
       includedSauce,
       extraSauce,
       totalSauce: includedSauce + extraSauce,
       total,
       subtotal: total,
     };
-  }, [activeProducts, isRegularSpecial, quantities]);
+  }, [activeProducts, quantities, specialRegularCount]);
+
+  const baseHoiGrams = useMemo(() => {
+    return activeProducts
+      .filter((product) => product.stockType === "shared_hoi")
+      .reduce((sum, product) => sum + (quantities[product.id] ?? 0) * product.deductionGrams, 0);
+  }, [activeProducts, quantities]);
 
   const remainingHoiGrams = Math.max(0, stock.availableHoiGrams - summary.hoiGramsDeducted);
   const openerSelected = activeProducts
@@ -239,6 +261,22 @@ export function OrderForm({
   };
   const decrement = (key: string): void => {
     setQuantities((prev) => ({ ...prev, [key]: Math.max(0, (prev[key] ?? 0) - 1) }));
+  };
+
+  const toggleRegularSpecialSlot = (index: number): void => {
+    setRegularSpecialSlots((prev) => {
+      const synced = syncRegularSpecialSlots(prev, regularQty);
+      const enabling = !synced[index];
+      if (
+        enabling &&
+        !canEnableAnotherSpecialSlot(synced, regularQty, baseHoiGrams, stock.availableHoiGrams)
+      ) {
+        return prev;
+      }
+      const next = [...synced];
+      next[index] = enabling;
+      return next;
+    });
   };
 
   const handleMapPinConfirm = async (lat: number, lng: number): Promise<void> => {
@@ -300,13 +338,7 @@ export function OrderForm({
           },
           notes: values.notes || undefined,
         },
-        quantities:
-          isRegularSpecial
-            ? {
-                ...quantities,
-                regular_special: 1,
-              }
-            : quantities,
+        quantities: buildQuantitiesWithSpecial(quantities, specialRegularCount),
         paymentMethod: values.paymentMethod,
         customerId: values.customerId || undefined,
         orderSource: values.orderSource ?? (isAdminMode ? "admin_manual" : "web"),
@@ -369,10 +401,10 @@ export function OrderForm({
     }
     writeAdminOrderDraft({
       quantities,
-      isRegularSpecial,
+      regularSpecialSlots,
       values: watchedValues,
     });
-  }, [hasRestoredAdminDraft, isAdminMode, isRegularSpecial, quantities, watchedValues]);
+  }, [hasRestoredAdminDraft, isAdminMode, quantities, regularSpecialSlots, watchedValues]);
 
   useEffect(() => {
     if (!isAdminMode || !selectedCustomer) {
@@ -433,23 +465,14 @@ export function OrderForm({
                   onDecrease={() => decrement(product.id)}
                 />
                 {product.id === "regular" && value > 0 ? (
-                  <div className="rounded-lg border border-brand-gold/30 bg-amber-50/40 p-2">
-                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-brand-redDark">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-brand-gold/50"
-                        checked={isRegularSpecial}
-                        disabled={remainingHoiGrams < SPECIAL_EXTRA_HOI_GRAMS}
-                        onChange={(event) => setIsRegularSpecial(event.target.checked)}
-                      />
-                      {language === "th" ? "พิเศษ (+500 กรัมหอย, +100 บาท)" : "Special (+500g hoi, +100 THB)"}
-                    </label>
-                    <p className="mt-1 text-xs text-slate-600">
-                      {language === "th"
-                        ? "เพิ่มเฉพาะหอย ไม่เพิ่มน้ำจิ้มหรือสลัด"
-                        : "Adds hoi only, no extra sauce or salad."}
-                    </p>
-                  </div>
+                  <RegularSpecialPicker
+                    language={language}
+                    regularQty={value}
+                    slots={regularSpecialSlots}
+                    baseHoiGrams={baseHoiGrams}
+                    availableHoiGrams={stock.availableHoiGrams}
+                    onToggleSlot={toggleRegularSpecialSlot}
+                  />
                 ) : null}
               </div>
             );
@@ -533,7 +556,7 @@ export function OrderForm({
       <OrderSummary
         language={language}
         quantities={quantities}
-        isRegularSpecial={isRegularSpecial}
+        specialRegularCount={specialRegularCount}
         products={activeProducts}
         t={t}
         paymentLabel={paymentValue === "bank_transfer" ? t.bankTransferOnDelivery : t.cashOnDelivery}

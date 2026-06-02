@@ -6,7 +6,7 @@ import type { OrderQuantities, ProductDoc } from "../../types/firestore";
 interface OrderSummaryProps {
   language: Language;
   quantities: OrderQuantities;
-  isRegularSpecial?: boolean;
+  specialRegularCount?: number;
   products: ProductDoc[];
   t: Translation;
   paymentLabel: string;
@@ -16,7 +16,7 @@ const SPECIAL_EXTRA_PRICE_THB = 100;
 export function OrderSummary({
   language,
   quantities,
-  isRegularSpecial = false,
+  specialRegularCount = 0,
   products,
   t,
   paymentLabel,
@@ -32,7 +32,7 @@ export function OrderSummary({
     .filter((entry) => entry.product.category === "sauce" && entry.product.includedSauce === 0)
     .reduce((sum, entry) => sum + entry.quantity, 0);
   const baseTotal = selectedProducts.reduce((sum, entry) => sum + entry.quantity * entry.product.price, 0);
-  const total = baseTotal + (isRegularSpecial ? SPECIAL_EXTRA_PRICE_THB : 0);
+  const total = baseTotal + specialRegularCount * SPECIAL_EXTRA_PRICE_THB;
 
   return (
     <Card title={t.orderSummary}>
@@ -43,11 +43,11 @@ export function OrderSummary({
             {formatTHB(entry.quantity * entry.product.price)} THB
           </p>
         ))}
-        {isRegularSpecial ? (
+        {specialRegularCount > 0 ? (
           <p>
             {language === "th"
-              ? "พิเศษ (+500 กรัมหอย) = +100 THB"
-              : "Special (+500g hoi) = +100 THB"}
+              ? `พิเศษ x${specialRegularCount} (+500 กรัมหอย/ชุด) = +${specialRegularCount * SPECIAL_EXTRA_PRICE_THB} THB`
+              : `Special x${specialRegularCount} (+500g hoi each) = +${specialRegularCount * SPECIAL_EXTRA_PRICE_THB} THB`}
           </p>
         ) : null}
       </div>
