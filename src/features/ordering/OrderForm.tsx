@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Alert } from "../../components/ui/Alert";
 import { Badge } from "../../components/ui/Badge";
@@ -20,7 +20,7 @@ import type {
   ProductDoc,
   StockDoc,
 } from "../../types/firestore";
-import { reverseGeocodeAddress } from "../../utils/geocoding";
+import { forwardGeocodeAddress, reverseGeocodeAddress } from "../../utils/geocoding";
 import { gramsToKgLabel } from "./stockUtils";
 import { QuantityStepper } from "./QuantityStepper";
 import { orderSchema, type OrderSchemaInput } from "./orderSchema";
@@ -125,6 +125,10 @@ export function OrderForm({
   const [submitError, setSubmitError] = useState("");
   const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
   const [isResolvingDeliveryAddress, setIsResolvingDeliveryAddress] = useState(false);
+  const [isGeocodingAddress, setIsGeocodingAddress] = useState(false);
+  const [addressGeocodeFailed, setAddressGeocodeFailed] = useState(false);
+  const skipAddressGeocodeRef = useRef(false);
+  const lastGeocodedQueryRef = useRef("");
   const [regularSpecialSlots, setRegularSpecialSlots] = useState<boolean[]>([]);
   const isAdminMode = mode === "admin";
   const [hasRestoredAdminDraft, setHasRestoredAdminDraft] = useState(false);
@@ -293,7 +297,10 @@ export function OrderForm({
     try {
       const address = await reverseGeocodeAddress(lat, lng);
       if (address) {
+        skipAddressGeocodeRef.current = true;
+        lastGeocodedQueryRef.current = address.trim();
         form.setValue("deliveryLocation", address, { shouldDirty: true, shouldValidate: true });
+        setAddressGeocodeFailed(false);
         setIsResolvingDeliveryAddress(false);
         notify(
           language === "th" ? "อัปเดตสถานที่จัดส่งจากพินแล้ว" : "Delivery location filled from pin.",
@@ -426,6 +433,83 @@ export function OrderForm({
   const selectedLat = form.watch("locationLat");
   const selectedLng = form.watch("locationLng");
   const deliveryLocationValue = form.watch("deliveryLocation");
+  const hasMapPin = Number.isFinite(selectedLat) && Number.isFinite(selectedLng);
+
+  useEffect(() => {
+    const query = deliveryLocationValue.trim();
+    if (skipAddressGeocodeRef.current) {
+      skipAddressGeocodeRef.current = false;
+      return;
+    }
+    if (query.length < 8) {
+      setAddressGeocodeFailed(false);
+      return;
+    }
+    if (query === lastGeocodedQueryRef.current && hasMapPin) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        if (query !== lastGeocodedQueryRef.current) {
+          form.resetField("locationLat");
+          form.resetField("locationLng");
+        }
+        setIsGeocodingAddress(true);
+        setAddressGeocodeFailed(false);
+        try {
+          const result = await forwardGeocodeAddress(query, controller.signal);
+          if (controller.signal.aborted) {
+            return;
+          }
+          if (result) {
+            lastGeocodedQueryRef.current = query;
+            form.setValue("locationLat", result.lat, { shouldDirty: true, shouldValidate: true });
+            form.setValue("locationLng", result.lng, { shouldDirty: true, shouldValidate: true });
+            setAddressGeocodeFailed(false);
+          } else {
+            setAddressGeocodeFailed(true);
+          }
+        } catch {
+          if (!controller.signal.aborted) {
+            setAddressGeocodeFailed(true);
+          }
+        } finally {
+          if (!controller.signal.aborted) {
+            setIsGeocodingAddress(false);
+          }
+        }
+      })();
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [deliveryLocationValue, form, hasMapPin]);
+
+  const deliveryPinStatusText = ((): string => {
+    if (isGeocodingAddress) {
+      return language === "th" ? "กำลังค้นหาตำแหน่งจากที่อยู่..." : "Finding location from address...";
+    }
+    if (isResolvingDeliveryAddress) {
+      return language === "th" ? "กำลังอัปเดตที่อยู่จากพิน..." : "Updating address from pin...";
+    }
+    if (hasMapPin) {
+      return language === "th"
+        ? `ปักหมุดแล้ว (${selectedLat.toFixed(5)}, ${selectedLng.toFixed(5)}) — ปรับบนแผนที่ได้`
+        : `Pin set (${selectedLat.toFixed(5)}, ${selectedLng.toFixed(5)}) — fine-tune on map if needed`;
+    }
+    if (addressGeocodeFailed) {
+      return language === "th"
+        ? "ไม่พบตำแหน่งจากที่อยู่นี้ กรุณาปักหมุดบนแผนที่"
+        : "Could not find this address. Please drop a pin on the map.";
+    }
+    return language === "th"
+      ? "กรอกที่อยู่เพื่อปักหมุดอัตโนมัติ หรือปักหมุดบนแผนที่เอง"
+      : "Enter an address to set the pin automatically, or drop a pin on the map.";
+  })();
 
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
@@ -516,34 +600,33 @@ export function OrderForm({
           <Input label={t.name} {...form.register("name")} error={form.formState.errors.name?.message} />
           <Input label={t.phone} {...form.register("phone")} error={form.formState.errors.phone?.message} />
           <Input label={`${t.email} (${t.optional})`} {...form.register("email")} />
-          <Input
-            label={t.deliveryLocation}
-            {...form.register("deliveryLocation")}
-            error={form.formState.errors.deliveryLocation?.message}
-          />
           <div className="space-y-1">
+            <Input
+              label={t.deliveryLocation}
+              {...form.register("deliveryLocation")}
+              error={form.formState.errors.deliveryLocation?.message}
+            />
+            <p className="text-xs text-slate-600">
+              {language === "th"
+                ? "กรอกที่อยู่ก่อน ระบบจะปักหมุดให้อัตโนมัติ"
+                : "Enter the address first — we will set the map pin for you."}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-slate-600">{deliveryPinStatusText}</p>
             <Button
               type="button"
               variant="secondary"
               onClick={() => setIsMapPickerOpen(true)}
               fullWidth
             >
-              {t.pickPinOnMap}
+              {language === "th" ? "ปรับหมุดบนแผนที่" : "Fine-tune pin on map"}
             </Button>
-            <p className="text-xs text-slate-600">
-              {isResolvingDeliveryAddress && !deliveryLocationValue.trim()
-                ? language === "th"
-                  ? "กำลังค้นหาที่อยู่..."
-                  : "Looking up address..."
-                : Number.isFinite(selectedLat) && Number.isFinite(selectedLng)
-                ? `Lat ${selectedLat.toFixed(6)}, Lng ${selectedLng.toFixed(6)}`
-                : language === "th"
-                  ? "กรุณาปักหมุดตำแหน่งบนแผนที่"
-                  : "Please drop a pin on the map."}
-            </p>
             {form.formState.errors.locationLat || form.formState.errors.locationLng ? (
               <p className="text-xs text-red-700">
-                {language === "th" ? "ต้องปักหมุดตำแหน่งก่อนยืนยันออเดอร์" : "Map pin is required before submitting."}
+                {language === "th"
+                  ? "ต้องมีตำแหน่งบนแผนที่ก่อนยืนยันออเดอร์ (กรอกที่อยู่หรือปักหมุด)"
+                  : "A map location is required before submitting (enter address or drop a pin)."}
               </p>
             ) : null}
           </div>
