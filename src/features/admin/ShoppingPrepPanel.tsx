@@ -17,10 +17,14 @@ interface ShoppingPrepPanelProps {
   onToast: (message: string, tone: ToastTone) => void;
 }
 
+interface ServingSourceDraft extends RecipeServingSourceConfig {
+  id: string;
+}
+
 interface RecipeDraft {
   target: string;
   servingsSource: "total_sauce" | "orders_count";
-  servingsSources: RecipeServingSourceConfig[];
+  servingsSources: ServingSourceDraft[];
   calcMode: "per_item" | "per_batch";
   servingsPerBatch: string;
   ingredients: IngredientDraft[];
@@ -46,11 +50,22 @@ function createIngredientDraft(): IngredientDraft {
   };
 }
 
+function createServingSourceDraft(source: RecipeServingSourceConfig): ServingSourceDraft {
+  return {
+    id: crypto.randomUUID(),
+    ...source,
+  };
+}
+
+function toServingSourcesDraft(sources: RecipeServingSourceConfig[]): ServingSourceDraft[] {
+  return sources.map((source) => createServingSourceDraft(source));
+}
+
 function createEmptyRecipeDraft(): RecipeDraft {
   return {
     target: "",
     servingsSource: "orders_count",
-    servingsSources: [{ type: "orders_count" }],
+    servingsSources: [createServingSourceDraft({ type: "orders_count" })],
     calcMode: "per_item",
     servingsPerBatch: "20",
     ingredients: [createIngredientDraft()],
@@ -71,7 +86,7 @@ function toRecipeDraft(recipe: PrepRecipeDoc): RecipeDraft {
   return {
     target: recipe.target,
     servingsSource: recipe.servingsSource,
-    servingsSources: legacySourceToSources(recipe),
+    servingsSources: toServingSourcesDraft(legacySourceToSources(recipe)),
     calcMode: recipe.calcMode,
     servingsPerBatch: String(recipe.servingsPerBatch ?? 20),
     ingredients: recipe.ingredients.map((ingredient) => ({
@@ -134,9 +149,13 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
         setRecipeDrafts((prev) => {
           const next = { ...prev };
           items.forEach((recipe) => {
-            if (!next[recipe.id]) {
-              next[recipe.id] = toRecipeDraft(recipe);
+            if (editingRecipeId === recipe.id) {
+              if (!next[recipe.id]) {
+                next[recipe.id] = toRecipeDraft(recipe);
+              }
+              return;
             }
+            next[recipe.id] = toRecipeDraft(recipe);
           });
           return next;
         });
@@ -148,7 +167,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
     return () => {
       unsub();
     };
-  }, [onToast]);
+  }, [editingRecipeId, onToast]);
 
   const shoppingList = useMemo(
     () => calculateShoppingList(orders.filter((order) => order.archivedAt === undefined), recipes),
@@ -229,7 +248,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
   const updateServingSource = (
     draft: RecipeDraft,
     sourceIndex: number,
-    patch: Partial<RecipeServingSourceConfig>,
+    patch: Partial<ServingSourceDraft>,
   ): RecipeDraft => ({
     ...draft,
     servingsSources: draft.servingsSources.map((source, index) =>
@@ -242,10 +261,35 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
     servingsSources: draft.servingsSources.filter((_, index) => index !== sourceIndex),
   });
 
-  const addServingSource = (draft: RecipeDraft): RecipeDraft => ({
-    ...draft,
-    servingsSources: [...draft.servingsSources, { type: "product_quantity", productId: products[0]?.id }],
-  });
+  const addServingSource = (draft: RecipeDraft): RecipeDraft => {
+    const hasOrderCount = draft.servingsSources.some((source) => source.type === "orders_count");
+    const usedProductIds = new Set(
+      draft.servingsSources
+        .filter((source) => source.type === "product_quantity" && source.productId)
+        .map((source) => source.productId as string),
+    );
+    const nextProduct = products.find((product) => !usedProductIds.has(product.id)) ?? products[0];
+    const nextConfig: RecipeServingSourceConfig = hasOrderCount
+      ? { type: "product_quantity", productId: nextProduct?.id }
+      : { type: "orders_count" };
+
+    if (nextConfig.type === "product_quantity" && !nextConfig.productId) {
+      return draft;
+    }
+
+    return {
+      ...draft,
+      servingsSources: [...draft.servingsSources, createServingSourceDraft(nextConfig)],
+    };
+  };
+
+  const openRecipeEditor = (recipe: PrepRecipeDoc): void => {
+    setRecipeDrafts((prev) => ({
+      ...prev,
+      [recipe.id]: toRecipeDraft(recipe),
+    }));
+    setEditingRecipeId(recipe.id);
+  };
 
   const toRecipePayload = (
     recipeId: string,
@@ -264,19 +308,25 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
       return null;
     }
 
+    const servingsSources = draft.servingsSources
+      .map((source) =>
+        source.type === "orders_count"
+          ? { type: "orders_count" as const }
+          : { type: "product_quantity" as const, productId: source.productId },
+      )
+      .filter((source) => source.type === "orders_count" || Boolean(source.productId));
+
+    if (servingsSources.length === 0) {
+      return null;
+    }
+
     return {
       id: recipeId,
       target: draft.target.trim() || recipeId,
       servingsSource: draft.servingsSources.some((source) => source.type === "orders_count")
         ? "orders_count"
         : "total_sauce",
-      servingsSources: draft.servingsSources
-        .map((source) =>
-          source.type === "orders_count"
-            ? { type: "orders_count" as const }
-            : { type: "product_quantity" as const, productId: source.productId },
-        )
-        .filter((source) => source.type === "orders_count" || Boolean(source.productId)),
+      servingsSources,
       calcMode: draft.calcMode,
       servingsPerBatch:
         draft.calcMode === "per_batch" ? Math.max(1, Number(draft.servingsPerBatch || "1")) : undefined,
@@ -284,19 +334,36 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
     };
   };
 
-  const handleSaveRecipe = async (recipeId: string, draft: RecipeDraft): Promise<void> => {
-    if (!draft) {
+  const handleSaveRecipe = async (recipeId: string, draft?: RecipeDraft): Promise<void> => {
+    const resolvedDraft = draft ?? recipeDrafts[recipeId];
+    if (!resolvedDraft) {
       return;
     }
-    const payload = toRecipePayload(recipeId, draft);
+    const payload = toRecipePayload(recipeId, resolvedDraft);
     if (!payload) {
-      onToast(language === "th" ? "กรุณาใส่วัตถุดิบอย่างน้อย 1 รายการ" : "Please add at least one ingredient.", "error");
+      const missingProductSource = resolvedDraft.servingsSources.some(
+        (source) => source.type === "product_quantity" && !source.productId,
+      );
+      onToast(
+        missingProductSource
+          ? language === "th"
+            ? "กรุณาเลือกสินค้าสำหรับแหล่งจำนวนขาย"
+            : "Please choose a product for each product-quantity source."
+          : language === "th"
+            ? "กรุณาใส่วัตถุดิบและแหล่งคำนวณอย่างน้อย 1 รายการ"
+            : "Please add at least one ingredient and one valid calculation source.",
+        "error",
+      );
       return;
     }
 
     setSavingRecipeId(recipeId);
     try {
       await upsertPrepRecipe(payload);
+      setRecipeDrafts((prev) => ({
+        ...prev,
+        [recipeId]: toRecipeDraft({ ...payload } as PrepRecipeDoc),
+      }));
       setEditingRecipeId(null);
       setIsAddingRecipe(false);
       setNewRecipeDraft(createEmptyRecipeDraft());
@@ -361,7 +428,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
           </p>
         </div>
         {draft.servingsSources.map((source, index) => (
-          <div key={`${index}-${source.type}-${source.productId ?? "orders"}`} className="border-t border-slate-200 pt-3 first:border-t-0 first:pt-0">
+          <div key={source.id} className="border-t border-slate-200 pt-3 first:border-t-0 first:pt-0">
             <div className="grid gap-2 md:grid-cols-[1fr_1.5fr_auto] md:items-end">
               <Select
                 label={language === "th" ? "แหล่งข้อมูล" : "Source"}
@@ -409,8 +476,24 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
             </div>
           </div>
         ))}
-        <Button size="compact" variant="secondary" onClick={() => onDraftChange(addServingSource(draft))}>
-          {language === "th" ? "เพิ่มแหล่งคำนวณ" : "Add source"}
+        <Button
+          size="compact"
+          variant="secondary"
+          onClick={() => {
+            const nextDraft = addServingSource(draft);
+            if (nextDraft.servingsSources.length === draft.servingsSources.length) {
+              onToast(
+                language === "th"
+                  ? "ต้องมีสินค้าในระบบก่อนเพิ่มแหล่งจำนวนขาย"
+                  : "Add products in Setup before adding a product-quantity source.",
+                "error",
+              );
+              return;
+            }
+            onDraftChange(nextDraft);
+          }}
+        >
+          {language === "th" ? "เพิ่มแหล่งคำนวณ" : "Add calculation source"}
         </Button>
       </div>
 
@@ -590,7 +673,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
                           {language === "th" ? "ปิด" : "Close"}
                         </Button>
                       ) : (
-                        <Button size="compact" variant="secondary" onClick={() => setEditingRecipeId(recipe.id)}>
+                        <Button size="compact" variant="secondary" onClick={() => openRecipeEditor(recipe)}>
                           {language === "th" ? "แก้ไข" : "Edit"}
                         </Button>
                       )}
@@ -614,7 +697,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
                     ? renderRecipeEditor(
                         draft,
                         (nextDraft) => handleRecipeDraftChange(recipe.id, nextDraft),
-                        () => void handleSaveRecipe(recipe.id, draft),
+                        () => void handleSaveRecipe(recipe.id),
                         () => setEditingRecipeId(null),
                         language === "th" ? "บันทึกสูตร" : "Save recipe",
                         savingRecipeId === recipe.id,
