@@ -1,4 +1,5 @@
 import {
+  Timestamp,
   collection,
   doc,
   getDocs,
@@ -46,6 +47,7 @@ export interface SubmitOrderInput {
 export interface SubmitOrderResult {
   orderId: string;
   orderRef: string;
+  order: OrderDoc & { id: string };
 }
 
 const settingsRef = doc(db, "settings", "main");
@@ -120,10 +122,37 @@ export const subscribeProducts = (
 
 export const subscribeOrders = (
   handler: (orders: Array<OrderDoc & { id: string }>) => void,
+  onError?: (error: Error) => void,
 ): (() => void) =>
-  onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (snapshot) => {
-    handler(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...(docSnapshot.data() as OrderDoc) })));
+  onSnapshot(
+    query(collection(db, "orders"), orderBy("createdAt", "desc")),
+    (snapshot) => {
+      handler(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...(docSnapshot.data() as OrderDoc) })));
+    },
+    (error) => {
+      if (onError) {
+        onError(error);
+      }
+    },
+  );
+
+export function mergeOrderIntoList(
+  orders: Array<OrderDoc & { id: string }>,
+  order: OrderDoc & { id: string },
+): Array<OrderDoc & { id: string }> {
+  const withoutDuplicate = orders.filter((item) => item.id !== order.id);
+  return [order, ...withoutDuplicate].sort((left, right) => {
+    const leftTime =
+      left.createdAt && typeof left.createdAt === "object" && "toMillis" in left.createdAt
+        ? (left.createdAt as Timestamp).toMillis()
+        : 0;
+    const rightTime =
+      right.createdAt && typeof right.createdAt === "object" && "toMillis" in right.createdAt
+        ? (right.createdAt as Timestamp).toMillis()
+        : 0;
+    return rightTime - leftTime;
   });
+}
 
 export const subscribeCustomers = (
   handler: (customers: CustomerProfileDoc[]) => void,
@@ -335,8 +364,9 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
             : [],
         ),
       pricingSnapshot: Object.fromEntries(products.map((item) => [item.id, item.price])),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      // Client timestamp so orderBy("createdAt") queries include the doc immediately.
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     };
 
     const orderDocRef = doc(collection(db, "orders"));
@@ -372,6 +402,7 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
     return {
       orderId: orderDocRef.id,
       orderRef,
+      order: { id: orderDocRef.id, ...orderData },
     };
   });
 }

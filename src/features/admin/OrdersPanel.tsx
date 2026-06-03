@@ -378,7 +378,8 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
       const statusMatch = order.status === statusFilter;
       const paymentMatch = paymentFilter === "all" ? true : order.paymentMethod === paymentFilter;
       const createdDate = toDateOrNull(order.createdAt);
-      const dateMatch = rangeStart === null ? true : createdDate !== null && createdDate >= rangeStart;
+      const dateMatch =
+        rangeStart === null ? true : (createdDate ?? new Date()) >= rangeStart;
       const searchable = `${order.orderRef} ${order.customer.name} ${order.customer.phone} ${order.customer.deliveryLocation}`.toLowerCase();
       const searchMatch = queryText.length === 0 ? true : searchable.includes(queryText);
       return archivedMatch && statusMatch && paymentMatch && dateMatch && searchMatch;

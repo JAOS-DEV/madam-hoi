@@ -8,7 +8,8 @@ import { translations } from "../../i18n";
 import { publicOrderingEnabled } from "../../lib/firebase";
 import type { CustomerProfileDoc, MainSettingsDoc, OrderDoc, ProductDoc, StockDoc } from "../../types/firestore";
 import { logoutAdmin } from "./adminService";
-import { subscribeCustomers, subscribeOrders } from "../ordering/orderService";
+import { mergeOrderIntoList, subscribeCustomers, subscribeOrders } from "../ordering/orderService";
+import type { OrderDoc } from "../../types/firestore";
 import { BankDetailsPanel } from "./BankDetailsPanel";
 import { OrdersPanel } from "./OrdersPanel";
 import { SettingsPanel } from "./SettingsPanel";
@@ -84,7 +85,9 @@ export function AdminDashboard({
   );
 
   useEffect(() => {
-    const unsubOrders = subscribeOrders(setOrders);
+    const unsubOrders = subscribeOrders(setOrders, (error) => {
+      showToast(error.message, "error");
+    });
     const unsubCustomers = subscribeCustomers(
       setCustomers,
       (error) => {
@@ -126,6 +129,10 @@ export function AdminDashboard({
     setActiveSection("setup");
     setSetupScrollTarget("prep");
     setSearchParams({ section: "setup" }, { replace: true });
+  };
+
+  const handleOrderCreated = (order: OrderDoc & { id: string }): void => {
+    setOrders((prev) => mergeOrderIntoList(prev, order));
   };
 
   const handleGoToOrders = (): void => {
@@ -253,6 +260,7 @@ export function AdminDashboard({
             products={products}
             customers={customers}
             onToast={showToast}
+            onOrderCreated={handleOrderCreated}
           />
           <OrdersPanel orders={orders} t={t} language={language} settings={settings} onToast={showToast} />
         </div>

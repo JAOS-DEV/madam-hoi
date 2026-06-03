@@ -13,6 +13,7 @@ import { useToast, type ToastTone } from "../../hooks/useToast";
 import type { Language, Translation } from "../../i18n";
 import type {
   CustomerProfileDoc,
+  OrderDoc,
   OrderQuantities,
   OrderSource,
   PaymentMethod,
@@ -43,7 +44,12 @@ interface OrderFormProps {
   products: ProductDoc[];
   customers?: CustomerProfileDoc[];
   t: Translation;
-  onOrderSuccess: (orderId: string, orderRef: string, paymentMethod: PaymentMethod) => void;
+  onOrderSuccess: (
+    orderId: string,
+    orderRef: string,
+    paymentMethod: PaymentMethod,
+    order: OrderDoc & { id: string },
+  ) => void;
   onToast?: (message: string, tone: ToastTone) => void;
 }
 
@@ -347,7 +353,7 @@ export function OrderForm({
       if (isAdminMode) {
         clearAdminOrderDraft();
       }
-      onOrderSuccess(result.orderId, result.orderRef, values.paymentMethod);
+      onOrderSuccess(result.orderId, result.orderRef, values.paymentMethod, result.order);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to submit order.";
       if (

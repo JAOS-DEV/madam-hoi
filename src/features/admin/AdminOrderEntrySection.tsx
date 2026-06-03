@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ToastTone } from "../../hooks/useToast";
 import type { Language, Translation } from "../../i18n";
-import type { CustomerProfileDoc, ProductDoc, StockDoc } from "../../types/firestore";
+import type { CustomerProfileDoc, OrderDoc, ProductDoc, StockDoc } from "../../types/firestore";
 import { OrderForm } from "../ordering/OrderForm";
 
 interface AdminOrderEntrySectionProps {
@@ -12,6 +12,7 @@ interface AdminOrderEntrySectionProps {
   products: ProductDoc[];
   customers: CustomerProfileDoc[];
   onToast: (message: string, tone: ToastTone) => void;
+  onOrderCreated?: (order: OrderDoc & { id: string }) => void;
 }
 
 export function AdminOrderEntrySection({
@@ -22,6 +23,7 @@ export function AdminOrderEntrySection({
   products,
   customers,
   onToast,
+  onOrderCreated,
 }: AdminOrderEntrySectionProps): JSX.Element {
   const [formResetKey, setFormResetKey] = useState(0);
 
@@ -45,7 +47,8 @@ export function AdminOrderEntrySection({
         customers={customers}
         t={t}
         onToast={onToast}
-        onOrderSuccess={(_orderId, orderRef) => {
+        onOrderSuccess={(_orderId, orderRef, _paymentMethod, order) => {
+          onOrderCreated?.(order);
           onToast(`${t.orderReceived} (${orderRef})`, "success");
           setFormResetKey((prev) => prev + 1);
         }}
