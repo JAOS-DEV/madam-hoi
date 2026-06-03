@@ -130,7 +130,10 @@ export const th: Translation = {
   dispatchLatLabel: "ละติจูดจุดเริ่ม (ไม่บังคับ)",
   dispatchLngLabel: "ลองจิจูดจุดเริ่ม (ไม่บังคับ)",
   routingSettingsHint: "ตั้งค่าจุดเริ่มครั้งเดียว แล้วเปิดเส้นทางจากรายการที่กรองไว้ได้ทันที",
-  openRouteInMaps: "เปิดเส้นทางใน Google Maps",
+  openRouteInMaps: "เปิดเส้นทางจากจุดส่ง",
+  startRouteNavigation: "เริ่มนำทางทันที",
+  routeNavigationHint:
+    "เส้นทางจากจุดส่งจะเริ่มที่ร้าน/จุดส่งสินค้า ปุ่มเริ่มนำทางใน Google Maps จะขึ้นเมื่อคุณอยู่ที่จุดส่งแล้ว หรือกดเริ่มนำทางทันทีเพื่อใช้ตำแหน่งปัจจุบัน (มักเปิดโหมดนำทางบนมือถือได้เลย)",
   pickPinOnMap: "หมุดบนแผนที่",
   cancelButton: "ยกเลิก",
   mapPinPickerHint: "แตะแผนที่เพื่อย้ายหมุด ใช้สำหรับปรับจุดจัดส่งให้ตรงตำแหน่ง",

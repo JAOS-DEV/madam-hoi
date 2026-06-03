@@ -130,7 +130,10 @@ export const en: Translation = {
   dispatchLatLabel: "Dispatch latitude (optional)",
   dispatchLngLabel: "Dispatch longitude (optional)",
   routingSettingsHint: "Set your dispatch base once, then open optimized route from filtered orders.",
-  openRouteInMaps: "Open route in Google Maps",
+  openRouteInMaps: "Open route from dispatch",
+  startRouteNavigation: "Start navigation now",
+  routeNavigationHint:
+    "Route from dispatch includes your shop as the start. Maps only shows Start when you are at the shop. Start navigation now uses your current location and should open turn-by-turn on your phone.",
   pickPinOnMap: "Pin on map",
   cancelButton: "Cancel",
   mapPinPickerHint: "Click the map to move the pin. Use this to fine-tune the delivery spot.",

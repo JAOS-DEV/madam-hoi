@@ -132,6 +132,8 @@ export interface Translation {
   dispatchLngLabel: string;
   routingSettingsHint: string;
   openRouteInMaps: string;
+  startRouteNavigation: string;
+  routeNavigationHint: string;
   pickPinOnMap: string;
   cancelButton: string;
   mapPinPickerHint: string;

@@ -277,21 +277,22 @@ export function OrderCustomerEditor({
         <Button type="button" fullWidth size="compact" variant="secondary" onClick={openMaps}>
           {language === "th" ? "เปิดแผนที่" : "Open map"}
         </Button>
-        <Button
-          type="button"
-          fullWidth
-          size="compact"
-          variant="secondary"
-          className={canEdit && !isEditing ? undefined : "col-span-2"}
-          onClick={onPickPin}
-          disabled={isSaving || isResolvingPin}
-        >
-          {isResolvingPin
-            ? language === "th"
-              ? "กำลังค้นหาที่อยู่..."
-              : "Looking up address..."
-            : t.pickPinOnMap}
-        </Button>
+        <div className={canEdit && !isEditing ? undefined : "col-span-2"}>
+          <Button
+            type="button"
+            fullWidth
+            size="compact"
+            variant="secondary"
+            onClick={onPickPin}
+            disabled={isSaving || isResolvingPin}
+          >
+            {isResolvingPin
+              ? language === "th"
+                ? "กำลังค้นหาที่อยู่..."
+                : "Looking up address..."
+              : t.pickPinOnMap}
+          </Button>
+        </div>
         {canEdit && !isEditing ? (
           <Button
             type="button"

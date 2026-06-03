@@ -10,6 +10,7 @@ import type { Language, Translation } from "../../i18n";
 import type { MainSettingsDoc, OrderDoc, OrderStatus } from "../../types/firestore";
 import { formatDateTime, toDateOrNull } from "../../utils/dates";
 import { reverseGeocodeAddress } from "../../utils/geocoding";
+import { buildGoogleMapsDirectionsUrl, openGoogleMapsDirectionsUrl } from "../../utils/googleMapsRoute";
 import { formatTHB } from "../../utils/money";
 import {
   archiveAllActiveOrders,
@@ -570,14 +571,28 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
     }
     const destination = routeStops[routeStops.length - 1].value;
     const waypoints = routeStops.slice(0, -1).map((item) => item.value);
-    const encodedOrigin = encodeURIComponent(originValue);
-    const encodedDestination = encodeURIComponent(destination);
-    const waypointParam =
-      waypoints.length > 0
-        ? `&waypoints=${waypoints.map((item) => encodeURIComponent(item)).join("%7C")}`
-        : "";
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${encodedOrigin}&destination=${encodedDestination}&travelmode=driving${waypointParam}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+    const url = buildGoogleMapsDirectionsUrl({
+      origin: originValue,
+      destination,
+      waypoints,
+      navigate: true,
+    });
+    openGoogleMapsDirectionsUrl(url);
+  };
+
+  const startRouteNavigation = (): void => {
+    if (routeStops.length === 0) {
+      window.alert(t.routeNoOrdersForRoute);
+      return;
+    }
+    const destination = routeStops[routeStops.length - 1].value;
+    const waypoints = routeStops.slice(0, -1).map((item) => item.value);
+    const url = buildGoogleMapsDirectionsUrl({
+      destination,
+      waypoints,
+      navigate: true,
+    });
+    openGoogleMapsDirectionsUrl(url);
   };
 
   const handleToggleOrderDetails = (orderId: string, element: HTMLElement): void => {
@@ -677,6 +692,10 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
             <Button fullWidth onClick={openRouteInMaps}>
               {t.openRouteInMaps}
             </Button>
+            <Button fullWidth variant="secondary" onClick={startRouteNavigation}>
+              {t.startRouteNavigation}
+            </Button>
+            <p className="text-xs leading-relaxed text-slate-600">{t.routeNavigationHint}</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Button size="compact" variant="secondary" fullWidth onClick={() => void handleArchiveOrders(["cancelled"])}>
                 {t.clearCancelledOrders}
