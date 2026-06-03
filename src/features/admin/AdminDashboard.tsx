@@ -8,7 +8,13 @@ import { translations } from "../../i18n";
 import { publicOrderingEnabled } from "../../lib/firebase";
 import type { CustomerProfileDoc, MainSettingsDoc, OrderDoc, ProductDoc, StockDoc } from "../../types/firestore";
 import { logoutAdmin } from "./adminService";
-import { mergeOrderIntoList, subscribeCustomers, subscribeOrders } from "../ordering/orderService";
+import {
+  fetchOrderById,
+  mergeOrderIntoList,
+  reconcileOrdersWithPending,
+  subscribeCustomers,
+  subscribeOrders,
+} from "../ordering/orderService";
 import { BankDetailsPanel } from "./BankDetailsPanel";
 import { OrdersPanel } from "./OrdersPanel";
 import { SettingsPanel } from "./SettingsPanel";
@@ -82,9 +88,12 @@ export function AdminDashboard({
   const [activeSection, setActiveSection] = useState<DashboardSection>(
     toDashboardSection(sectionParam),
   );
+  const pendingOrdersRef = useRef(new Map<string, OrderDoc & { id: string }>());
 
   useEffect(() => {
-    const unsubOrders = subscribeOrders(setOrders, (error) => {
+    const unsubOrders = subscribeOrders((serverOrders) => {
+      setOrders(reconcileOrdersWithPending(serverOrders, pendingOrdersRef.current));
+    }, (error) => {
       showToast(error.message, "error");
     });
     const unsubCustomers = subscribeCustomers(
@@ -131,7 +140,19 @@ export function AdminDashboard({
   };
 
   const handleOrderCreated = (order: OrderDoc & { id: string }): void => {
+    pendingOrdersRef.current.set(order.id, order);
     setOrders((prev) => mergeOrderIntoList(prev, order));
+    if (activeSection === "orders") {
+      setSearchParams({ section: "orders", order: order.id }, { replace: true });
+    }
+    void (async () => {
+      const fetched = await fetchOrderById(order.id);
+      if (!fetched) {
+        return;
+      }
+      pendingOrdersRef.current.delete(order.id);
+      setOrders((prev) => mergeOrderIntoList(prev.filter((item) => item.id !== order.id), fetched));
+    })();
   };
 
   const handleGoToOrders = (): void => {

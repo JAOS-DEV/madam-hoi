@@ -2,6 +2,7 @@ import {
   Timestamp,
   collection,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -136,22 +137,52 @@ export const subscribeOrders = (
     },
   );
 
+function getOrderCreatedMillis(createdAt: unknown): number {
+  if (createdAt && typeof createdAt === "object" && "toMillis" in createdAt) {
+    return (createdAt as Timestamp).toMillis();
+  }
+  if (
+    createdAt &&
+    typeof createdAt === "object" &&
+    "seconds" in createdAt &&
+    typeof (createdAt as { seconds: unknown }).seconds === "number"
+  ) {
+    return (createdAt as { seconds: number }).seconds * 1000;
+  }
+  return 0;
+}
+
 export function mergeOrderIntoList(
   orders: Array<OrderDoc & { id: string }>,
   order: OrderDoc & { id: string },
 ): Array<OrderDoc & { id: string }> {
   const withoutDuplicate = orders.filter((item) => item.id !== order.id);
-  return [order, ...withoutDuplicate].sort((left, right) => {
-    const leftTime =
-      left.createdAt && typeof left.createdAt === "object" && "toMillis" in left.createdAt
-        ? (left.createdAt as Timestamp).toMillis()
-        : 0;
-    const rightTime =
-      right.createdAt && typeof right.createdAt === "object" && "toMillis" in right.createdAt
-        ? (right.createdAt as Timestamp).toMillis()
-        : 0;
-    return rightTime - leftTime;
-  });
+  return [...withoutDuplicate, order].sort(
+    (left, right) => getOrderCreatedMillis(right.createdAt) - getOrderCreatedMillis(left.createdAt),
+  );
+}
+
+export function reconcileOrdersWithPending(
+  serverOrders: Array<OrderDoc & { id: string }>,
+  pending: Map<string, OrderDoc & { id: string }>,
+): Array<OrderDoc & { id: string }> {
+  let merged = serverOrders;
+  for (const [id, order] of pending.entries()) {
+    if (serverOrders.some((item) => item.id === id)) {
+      pending.delete(id);
+      continue;
+    }
+    merged = mergeOrderIntoList(merged, order);
+  }
+  return merged;
+}
+
+export async function fetchOrderById(orderId: string): Promise<(OrderDoc & { id: string }) | null> {
+  const snapshot = await getDoc(doc(db, "orders", orderId));
+  if (!snapshot.exists()) {
+    return null;
+  }
+  return { id: snapshot.id, ...(snapshot.data() as OrderDoc) };
 }
 
 export const subscribeCustomers = (
