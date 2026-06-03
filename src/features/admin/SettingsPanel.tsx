@@ -271,6 +271,7 @@ export function SettingsPanel({
       <MapPinPicker
         isOpen={isDispatchPickerOpen}
         title={t.dispatchStartPointLabel}
+        t={t}
         initialLat={dispatchLat.trim() ? Number(dispatchLat) : undefined}
         initialLng={dispatchLng.trim() ? Number(dispatchLng) : undefined}
         onClose={() => setIsDispatchPickerOpen(false)}

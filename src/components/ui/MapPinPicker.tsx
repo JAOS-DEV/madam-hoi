@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { MapContainer, TileLayer, useMapEvents, CircleMarker } from "react-leaflet";
+import type { Translation } from "../../i18n";
 import { Button } from "./Button";
 
 interface MapPinPickerProps {
   isOpen: boolean;
   title: string;
+  t: Translation;
   initialLat?: number;
   initialLng?: number;
   onClose: () => void;
@@ -34,6 +36,7 @@ function ClickHandler({ selected, onSelect }: ClickHandlerProps): JSX.Element | 
 export function MapPinPicker({
   isOpen,
   title,
+  t,
   initialLat,
   initialLng,
   onClose,
@@ -62,9 +65,7 @@ export function MapPinPicker({
       <div className="mx-auto mt-2 w-full max-w-2xl space-y-3 rounded-xl border border-brand-gold/30 bg-white p-3 shadow-lg sm:mt-6 sm:p-4">
         <div className="pr-6">
           <h3 className="text-base font-semibold text-brand-redDark sm:text-lg">{title}</h3>
-          <p className="text-xs text-slate-600">
-            Click the map to move the pin. Use this to fine-tune the delivery spot.
-          </p>
+          <p className="text-xs text-slate-600">{t.mapPinPickerHint}</p>
         </div>
         <div className="h-[55vh] min-h-64 max-h-[420px] overflow-hidden rounded-lg border border-brand-gold/30">
           <MapContainer center={defaultCenter} zoom={13} style={{ height: "100%", width: "100%" }}>
@@ -76,11 +77,13 @@ export function MapPinPicker({
           </MapContainer>
         </div>
         <div className="text-sm text-slate-700">
-          {selected ? `Lat: ${selected[0].toFixed(6)}, Lng: ${selected[1].toFixed(6)}` : "No pin selected"}
+          {selected
+            ? `${t.mapPinLatLabel}: ${selected[0].toFixed(6)}, ${t.mapPinLngLabel}: ${selected[1].toFixed(6)}`
+            : t.mapPinPickerNoPinSelected}
         </div>
         <div className="grid grid-cols-1 gap-2 sm:flex sm:justify-end">
           <Button size="compact" variant="secondary" onClick={onClose}>
-            Cancel
+            {t.cancelButton}
           </Button>
           <Button
             size="compact"
@@ -91,7 +94,7 @@ export function MapPinPicker({
             }}
             disabled={!selected}
           >
-            Use this pin
+            {t.mapPinPickerUseThisPin}
           </Button>
         </div>
       </div>

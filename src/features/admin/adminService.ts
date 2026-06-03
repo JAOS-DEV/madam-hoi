@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -16,6 +17,7 @@ import { adminEmails, auth, db } from "../../lib/firebase";
 import type {
   CustomerProfileDoc,
   MainSettingsDoc,
+  OrderDoc,
   OrderStatus,
   PackagingStock,
   PrepRecipeDoc,
@@ -23,6 +25,7 @@ import type {
 import { sanitizeForFirestore } from "../../utils/firestore";
 import { cancelOrder, updateOrderStatus } from "../ordering/orderService";
 import { kgToGrams } from "../ordering/stockUtils";
+import type { OrderCustomerDetailsPatch } from "./OrderCustomerEditor";
 
 export function isAllowedAdmin(user: User | null): boolean {
   if (!user?.email) {
@@ -130,15 +133,70 @@ export async function archiveAllActiveOrders(): Promise<number> {
   return targets.length;
 }
 
+function buildOrderCustomer(
+  existing: OrderDoc["customer"],
+  patch: OrderCustomerDetailsPatch,
+): OrderDoc["customer"] {
+  const customer: OrderDoc["customer"] = {
+    name: patch.name.trim(),
+    phone: patch.phone.trim(),
+    deliveryLocation: patch.deliveryLocation.trim(),
+  };
+  const email = patch.email.trim();
+  const notes = patch.notes.trim();
+  if (email) {
+    customer.email = email;
+  }
+  if (notes) {
+    customer.notes = notes;
+  }
+  if (patch.location) {
+    customer.location = patch.location;
+  } else if (existing.location) {
+    customer.location = existing.location;
+  }
+  return customer;
+}
+
+export async function updateOrderCustomerDetails(
+  orderId: string,
+  patch: OrderCustomerDetailsPatch,
+): Promise<void> {
+  const orderRef = doc(db, "orders", orderId);
+  const snapshot = await getDoc(orderRef);
+  if (!snapshot.exists()) {
+    throw new Error("Order not found");
+  }
+  const existing = snapshot.data() as OrderDoc;
+  if (!patch.name.trim() || !patch.phone.trim() || !patch.deliveryLocation.trim()) {
+    throw new Error("INVALID_CUSTOMER_DETAILS");
+  }
+  await updateDoc(
+    orderRef,
+    sanitizeForFirestore({
+      customer: buildOrderCustomer(existing.customer, patch),
+      updatedAt: serverTimestamp(),
+    }),
+  );
+}
+
 export async function updateOrderLocation(
   orderId: string,
   location: { lat: number; lng: number },
   deliveryLocation?: string,
 ): Promise<void> {
-  await updateDoc(doc(db, "orders", orderId), {
-    "customer.location": location,
-    ...(deliveryLocation ? { "customer.deliveryLocation": deliveryLocation } : {}),
-    updatedAt: serverTimestamp(),
+  const snapshot = await getDoc(doc(db, "orders", orderId));
+  if (!snapshot.exists()) {
+    throw new Error("Order not found");
+  }
+  const existing = snapshot.data() as OrderDoc;
+  await updateOrderCustomerDetails(orderId, {
+    name: existing.customer.name,
+    phone: existing.customer.phone,
+    email: existing.customer.email ?? "",
+    deliveryLocation: deliveryLocation?.trim() || existing.customer.deliveryLocation,
+    notes: existing.customer.notes ?? "",
+    location,
   });
 }
 

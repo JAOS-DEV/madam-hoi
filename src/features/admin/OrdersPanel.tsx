@@ -16,8 +16,10 @@ import {
   archiveOrdersByStatuses,
   cancelOrderByAdmin,
   setOrderStatus,
+  updateOrderCustomerDetails,
   updateOrderLocation,
 } from "./adminService";
+import { OrderCustomerEditor, type OrderCustomerDetailsPatch } from "./OrderCustomerEditor";
 import { getAdminErrorMessage } from "./adminToastErrors";
 
 interface OrdersPanelProps {
@@ -74,6 +76,37 @@ function getOrderItemSummary(order: OrderDoc & { id: string }, language: Languag
   return itemLabels.join(", ");
 }
 
+function OrderItemsBreakdown({
+  order,
+  language,
+  t,
+}: {
+  order: OrderDoc & { id: string };
+  language: Language;
+  t: Translation;
+}): JSX.Element {
+  return (
+    <div className="mt-3 rounded-lg border border-brand-gold/30 bg-brand-cream/50 p-3.5">
+      <OrderFieldLabel>{language === "th" ? "รายการสินค้า" : "Items"}</OrderFieldLabel>
+      <div className="mt-2 space-y-2">
+        {order.itemSnapshot
+          .filter((item) => item.quantity > 0)
+          .map((item) => (
+            <div key={`${item.productId}-${item.label}`} className="flex justify-between gap-3 text-sm text-slate-800">
+              <span>
+                {item.quantity} x {language === "th" ? item.thaiLabel : item.label}
+              </span>
+              <span className="shrink-0 font-medium">{formatTHB(item.lineTotal)} THB</span>
+            </div>
+          ))}
+      </div>
+      <p className="mt-3 border-t border-brand-gold/20 pt-2 text-right text-sm font-semibold text-brand-redDark">
+        {t.total}: {formatTHB(order.calculated.total)} THB
+      </p>
+    </div>
+  );
+}
+
 interface OrderDetailExpandProps {
   order: OrderDoc & { id: string };
   language: Language;
@@ -85,13 +118,15 @@ interface OrderDetailExpandProps {
   savingStatusId: string | null;
   restoreMap: Record<string, boolean>;
   resolvingLocationOrderId: string | null;
+  savingCustomerOrderId: string | null;
   onAdvanceStatus: (orderId: string, status: OrderStatus) => void;
   onStatusChange: (orderId: string, status: OrderStatus) => void;
+  onSaveCustomerDetails: (orderId: string, patch: OrderCustomerDetailsPatch) => Promise<void>;
   onCopy: (value: string, label: string) => void;
-  onOpenMaps: (order: OrderDoc & { id: string }) => void;
   onCancel: (orderId: string, restoreStock: boolean) => void;
   onRestoreMapChange: (orderId: string, restoreStock: boolean) => void;
   onPickPin: (orderId: string) => void;
+  onCustomerEditingChange: (orderId: string, editing: boolean) => void;
 }
 
 function OrderDetailExpand({
@@ -105,82 +140,37 @@ function OrderDetailExpand({
   savingStatusId,
   restoreMap,
   resolvingLocationOrderId,
+  savingCustomerOrderId,
   onAdvanceStatus,
   onStatusChange,
+  onSaveCustomerDetails,
   onCopy,
-  onOpenMaps,
   onCancel,
   onRestoreMapChange,
   onPickPin,
+  onCustomerEditingChange,
 }: OrderDetailExpandProps): JSX.Element {
   const isSaving = savingStatusId === order.id;
+  const canEditCustomer = order.status !== "completed" && order.status !== "cancelled";
 
   return (
-    <div className="mt-4 space-y-4 border-t border-brand-gold/30 pt-4">
-      <div className="rounded-lg border border-brand-gold/30 bg-white p-3.5">
-        <OrderFieldLabel>{language === "th" ? "รายการสินค้า" : "Items"}</OrderFieldLabel>
-        <div className="mt-2 space-y-2">
-          {order.itemSnapshot
-            .filter((item) => item.quantity > 0)
-            .map((item) => (
-              <div key={`${item.productId}-${item.label}`} className="flex justify-between gap-3 text-sm text-slate-800">
-                <span>
-                  {item.quantity} x {language === "th" ? item.thaiLabel : item.label}
-                </span>
-                <span className="shrink-0 font-medium">{formatTHB(item.lineTotal)} THB</span>
-              </div>
-            ))}
-        </div>
-        <p className="mt-3 border-t border-brand-gold/20 pt-2 text-right text-sm font-semibold text-brand-redDark">
-          {t.total}: {formatTHB(order.calculated.total)} THB
-        </p>
-      </div>
-
-      <div>
-        <OrderFieldLabel>{language === "th" ? "ติดต่อและจัดส่ง" : "Contact & delivery"}</OrderFieldLabel>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <Button type="button" fullWidth size="compact" variant="secondary" onClick={() => window.open(`tel:${order.customer.phone}`)}>
-            {language === "th" ? "โทรลูกค้า" : "Call customer"}
-          </Button>
-          <Button
-            type="button"
-            fullWidth
-            size="compact"
-            variant="secondary"
-            onClick={() => void onCopy(order.customer.phone, language === "th" ? "เบอร์โทร" : "Phone")}
-          >
-            {language === "th" ? "คัดลอกเบอร์" : "Copy phone"}
-          </Button>
-          <Button
-            type="button"
-            fullWidth
-            size="compact"
-            variant="secondary"
-            onClick={() => void onCopy(order.customer.deliveryLocation, language === "th" ? "ที่อยู่" : "Address")}
-          >
-            {language === "th" ? "คัดลอกที่อยู่" : "Copy address"}
-          </Button>
-          <Button type="button" fullWidth size="compact" variant="secondary" onClick={() => onOpenMaps(order)}>
-            {language === "th" ? "เปิดแผนที่" : "Open map"}
-          </Button>
-          <div className="col-span-2">
-            <Button
-              type="button"
-              fullWidth
-              size="compact"
-              variant="secondary"
-              onClick={() => onPickPin(order.id)}
-              disabled={resolvingLocationOrderId === order.id}
-            >
-              {resolvingLocationOrderId === order.id
-                ? language === "th"
-                  ? "กำลังค้นหาที่อยู่..."
-                  : "Looking up address..."
-                : t.pickPinOnMap}
-            </Button>
-          </div>
-        </div>
-      </div>
+    <div className="mt-3 space-y-4">
+      <OrderCustomerEditor
+        order={order}
+        language={language}
+        t={t}
+        canEdit={canEditCustomer}
+        isSaving={savingCustomerOrderId === order.id}
+        isResolvingPin={resolvingLocationOrderId === order.id}
+        onSave={(patch) => onSaveCustomerDetails(order.id, patch)}
+        onPickPin={() => onPickPin(order.id)}
+        onCopy={(value, label) => {
+          void onCopy(value, label);
+        }}
+        onEditingChange={(editing) => {
+          onCustomerEditingChange(order.id, editing);
+        }}
+      />
 
       {nextStatus && nextActionLabel ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-3.5">
@@ -279,7 +269,9 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
   const [dateRange, setDateRange] = useState<"all" | "day" | "week" | "month">("all");
   const [pickingOrderId, setPickingOrderId] = useState<string | null>(null);
   const [resolvingLocationOrderId, setResolvingLocationOrderId] = useState<string | null>(null);
+  const [savingCustomerOrderId, setSavingCustomerOrderId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [editingCustomerOrderId, setEditingCustomerOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!focusOrderId || handledFocusOrderIdRef.current === focusOrderId) {
@@ -438,21 +430,6 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
     }
   };
 
-  const openOrderInMaps = (order: OrderDoc & { id: string }): void => {
-    const destination = order.customer.location
-      ? `${order.customer.location.lat},${order.customer.location.lng}`
-      : order.customer.deliveryLocation.trim();
-    if (!destination) {
-      window.alert(t.routeNoOrdersForRoute);
-      return;
-    }
-    window.open(
-      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
-  };
-
   const handleCancelOrder = async (orderId: string, restoreStock: boolean): Promise<void> => {
     try {
       await cancelOrderByAdmin(orderId, restoreStock);
@@ -488,6 +465,33 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
       );
     } catch (error) {
       onToast(getAdminErrorMessage(error, t), "error");
+    }
+  };
+
+  const handleSaveCustomerDetails = async (
+    orderId: string,
+    patch: OrderCustomerDetailsPatch,
+  ): Promise<void> => {
+    setSavingCustomerOrderId(orderId);
+    try {
+      await updateOrderCustomerDetails(orderId, patch);
+      onToast(
+        language === "th" ? "บันทึกข้อมูลลูกค้าแล้ว" : "Customer details saved.",
+        "success",
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message === "INVALID_CUSTOMER_DETAILS") {
+        onToast(
+          language === "th"
+            ? "กรุณากรอกชื่อ เบอร์โทร และที่อยู่จัดส่ง"
+            : "Please enter name, phone, and delivery address.",
+          "error",
+        );
+        return;
+      }
+      onToast(getAdminErrorMessage(error, t), "error");
+    } finally {
+      setSavingCustomerOrderId(null);
     }
   };
 
@@ -536,6 +540,9 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
   const handleToggleOrderDetails = (orderId: string, element: HTMLElement): void => {
     const isClosing = selectedOrderId === orderId;
     setSelectedOrderId(isClosing ? null : orderId);
+    if (isClosing) {
+      setEditingCustomerOrderId((prev) => (prev === orderId ? null : prev));
+    }
     if (!isClosing) {
       window.requestAnimationFrame(() => {
         element.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -679,24 +686,28 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
                         ) : null}
                       </div>
                     </div>
-                    <div>
-                      <OrderFieldLabel>{language === "th" ? "ลูกค้า" : "Customer"}</OrderFieldLabel>
-                      <p className="mt-0.5 text-sm font-semibold text-slate-900">{order.customer.name}</p>
-                    </div>
-                    <div>
-                      <OrderFieldLabel>{language === "th" ? "เบอร์โทร" : "Phone"}</OrderFieldLabel>
-                      <p className="mt-0.5 text-sm text-slate-700">{order.customer.phone}</p>
-                    </div>
-                    <div>
-                      <OrderFieldLabel>{language === "th" ? "ที่อยู่จัดส่ง" : "Address"}</OrderFieldLabel>
-                      <p
-                        className={`mt-0.5 text-sm leading-relaxed text-slate-700 ${
-                          isExpanded ? "whitespace-pre-wrap break-words" : "truncate"
-                        }`}
-                      >
-                        {order.customer.deliveryLocation}
-                      </p>
-                    </div>
+                    {!(isExpanded && editingCustomerOrderId === order.id) ? (
+                      <>
+                        <div>
+                          <OrderFieldLabel>{language === "th" ? "ลูกค้า" : "Customer"}</OrderFieldLabel>
+                          <p className="mt-0.5 text-sm font-semibold text-slate-900">{order.customer.name}</p>
+                        </div>
+                        <div>
+                          <OrderFieldLabel>{language === "th" ? "เบอร์โทร" : "Phone"}</OrderFieldLabel>
+                          <p className="mt-0.5 text-sm text-slate-700">{order.customer.phone}</p>
+                        </div>
+                        <div>
+                          <OrderFieldLabel>{language === "th" ? "ที่อยู่จัดส่ง" : "Address"}</OrderFieldLabel>
+                          <p
+                            className={`mt-0.5 text-sm leading-relaxed text-slate-700 ${
+                              isExpanded ? "whitespace-pre-wrap break-words" : "truncate"
+                            }`}
+                          >
+                            {order.customer.deliveryLocation}
+                          </p>
+                        </div>
+                      </>
+                    ) : null}
                     {isExpanded && order.customer.notes ? (
                       <div>
                         <OrderFieldLabel>{language === "th" ? "โน้ต" : "Note"}</OrderFieldLabel>
@@ -734,7 +745,9 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
                 </div>
               </button>
               {isExpanded ? (
-                <OrderDetailExpand
+                <>
+                  <OrderItemsBreakdown order={order} language={language} t={t} />
+                  <OrderDetailExpand
                   order={order}
                   language={language}
                   t={t}
@@ -745,6 +758,8 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
                   savingStatusId={savingStatusId}
                   restoreMap={restoreMap}
                   resolvingLocationOrderId={resolvingLocationOrderId}
+                  savingCustomerOrderId={savingCustomerOrderId}
+                  onSaveCustomerDetails={handleSaveCustomerDetails}
                   onAdvanceStatus={(orderId, status) => {
                     void handleOrderStatusChange(orderId, status);
                   }}
@@ -754,7 +769,6 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
                   onCopy={(value, label) => {
                     void handleCopy(value, label);
                   }}
-                  onOpenMaps={openOrderInMaps}
                   onCancel={(orderId, restoreStock) => {
                     void handleCancelOrder(orderId, restoreStock);
                   }}
@@ -765,7 +779,11 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
                     }));
                   }}
                   onPickPin={setPickingOrderId}
+                  onCustomerEditingChange={(orderId, editing) => {
+                    setEditingCustomerOrderId(editing ? orderId : null);
+                  }}
                 />
+                </>
               ) : null}
               {!isExpanded && nextStatus && nextActionLabel ? (
                 <div className="mt-3">
@@ -793,6 +811,7 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
       <MapPinPicker
         isOpen={pickingOrderId !== null}
         title={t.pickPinOnMap}
+        t={t}
         initialLat={
           pickingOrderId
             ? visibleOrders.find((order) => order.id === pickingOrderId)?.customer.location?.lat

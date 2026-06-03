@@ -133,6 +133,12 @@ export interface Translation {
   routingSettingsHint: string;
   openRouteInMaps: string;
   pickPinOnMap: string;
+  cancelButton: string;
+  mapPinPickerHint: string;
+  mapPinPickerUseThisPin: string;
+  mapPinPickerNoPinSelected: string;
+  mapPinLatLabel: string;
+  mapPinLngLabel: string;
   routeNoDispatchPoint: string;
   routeNoOrdersForRoute: string;
   routeStopsLimitedNote: string;

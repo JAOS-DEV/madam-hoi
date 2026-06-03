@@ -666,6 +666,7 @@ export function OrderForm({
       <MapPinPicker
         isOpen={isMapPickerOpen}
         title={t.pickPinOnMap}
+        t={t}
         initialLat={Number.isFinite(selectedLat) ? selectedLat : undefined}
         initialLng={Number.isFinite(selectedLng) ? selectedLng : undefined}
         onClose={() => setIsMapPickerOpen(false)}
