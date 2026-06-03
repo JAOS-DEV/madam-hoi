@@ -9,7 +9,6 @@ import { publicOrderingEnabled } from "../../lib/firebase";
 import type { CustomerProfileDoc, MainSettingsDoc, OrderDoc, ProductDoc, StockDoc } from "../../types/firestore";
 import { logoutAdmin } from "./adminService";
 import { mergeOrderIntoList, subscribeCustomers, subscribeOrders } from "../ordering/orderService";
-import type { OrderDoc } from "../../types/firestore";
 import { BankDetailsPanel } from "./BankDetailsPanel";
 import { OrdersPanel } from "./OrdersPanel";
 import { SettingsPanel } from "./SettingsPanel";
