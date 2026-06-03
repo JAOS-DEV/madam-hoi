@@ -171,7 +171,6 @@ export function TodayPanel({
       ? Math.floor(stock.availableHoiGrams / smallProduct.deductionGrams)
       : 0;
   const shoppingList = useMemo(() => calculateShoppingList(todayOrders, recipes), [recipes, todayOrders]);
-  const shoppingListPreview = shoppingList.slice(0, publicOrderingEnabled ? 4 : 6);
   const hoiAvailableKg = stock.availableHoiGrams / 1000;
 
   useEffect(() => {
@@ -205,7 +204,7 @@ export function TodayPanel({
   const prepShoppingListCard = (
     <Card title={prepTitle}>
       <div className="space-y-2">
-        {shoppingListPreview.map((item) => (
+        {shoppingList.map((item) => (
           <div
             key={`${item.ingredient}-${item.unit}`}
             className="flex justify-between gap-3 rounded-lg border border-brand-gold/30 bg-white p-2 text-sm"
@@ -216,7 +215,7 @@ export function TodayPanel({
             </span>
           </div>
         ))}
-        {shoppingListPreview.length === 0 ? (
+        {shoppingList.length === 0 ? (
           <p className="text-sm text-slate-500">
             {language === "th"
               ? "ยังไม่มีรายการซื้อจากออเดอร์วันนี้"
@@ -224,13 +223,6 @@ export function TodayPanel({
           </p>
         ) : null}
       </div>
-      {shoppingList.length > shoppingListPreview.length ? (
-        <p className="mt-2 text-xs text-slate-600">
-          {language === "th"
-            ? `และอีก ${shoppingList.length - shoppingListPreview.length} รายการในเครื่องมือเตรียมของ`
-            : `Plus ${shoppingList.length - shoppingListPreview.length} more in prep tools.`}
-        </p>
-      ) : null}
       <div className="mt-3">
         <Button fullWidth variant="secondary" onClick={onOpenPrepTools}>
           {language === "th" ? "เปิดเครื่องมือเตรียมของ" : "Open prep tools"}
