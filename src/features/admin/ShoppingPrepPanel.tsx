@@ -27,6 +27,7 @@ interface RecipeDraft {
 }
 
 interface IngredientDraft {
+  id: string;
   name: string;
   amount: string;
   unit: string;
@@ -35,21 +36,26 @@ interface IngredientDraft {
 
 const unitOptions = ["pcs", "g", "kg", "ml", "l", "bottle", "bag", "pack", "unit"];
 
-const emptyIngredient: IngredientDraft = {
-  name: "",
-  amount: "1",
-  unit: "pcs",
-  wastePct: "0",
-};
+function createIngredientDraft(): IngredientDraft {
+  return {
+    id: crypto.randomUUID(),
+    name: "",
+    amount: "1",
+    unit: "pcs",
+    wastePct: "0",
+  };
+}
 
-const emptyRecipeDraft: RecipeDraft = {
-  target: "",
-  servingsSource: "orders_count",
-  servingsSources: [{ type: "orders_count" }],
-  calcMode: "per_item",
-  servingsPerBatch: "20",
-  ingredients: [{ ...emptyIngredient }],
-};
+function createEmptyRecipeDraft(): RecipeDraft {
+  return {
+    target: "",
+    servingsSource: "orders_count",
+    servingsSources: [{ type: "orders_count" }],
+    calcMode: "per_item",
+    servingsPerBatch: "20",
+    ingredients: [createIngredientDraft()],
+  };
+}
 
 function legacySourceToSources(recipe: PrepRecipeDoc): RecipeServingSourceConfig[] {
   if (recipe.servingsSources && recipe.servingsSources.length > 0) {
@@ -69,6 +75,7 @@ function toRecipeDraft(recipe: PrepRecipeDoc): RecipeDraft {
     calcMode: recipe.calcMode,
     servingsPerBatch: String(recipe.servingsPerBatch ?? 20),
     ingredients: recipe.ingredients.map((ingredient) => ({
+      id: crypto.randomUUID(),
       name: ingredient.name,
       amount: String(ingredient.amount),
       unit: ingredient.unit || "pcs",
@@ -116,7 +123,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
   const [recipeDrafts, setRecipeDrafts] = useState<Record<string, RecipeDraft>>({});
   const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
   const [isAddingRecipe, setIsAddingRecipe] = useState(false);
-  const [newRecipeDraft, setNewRecipeDraft] = useState<RecipeDraft>(emptyRecipeDraft);
+  const [newRecipeDraft, setNewRecipeDraft] = useState<RecipeDraft>(createEmptyRecipeDraft);
   const [savingRecipeId, setSavingRecipeId] = useState<string | null>(null);
   const [deletingRecipeId, setDeletingRecipeId] = useState<string | null>(null);
 
@@ -192,7 +199,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
     setRecipeDrafts((prev) => ({
       ...prev,
       [recipeId]: {
-        ...(prev[recipeId] ?? emptyRecipeDraft),
+        ...(prev[recipeId] ?? createEmptyRecipeDraft()),
         ...patch,
       },
     }));
@@ -216,7 +223,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
 
   const addIngredient = (draft: RecipeDraft): RecipeDraft => ({
     ...draft,
-    ingredients: [...draft.ingredients, { ...emptyIngredient }],
+    ingredients: [...draft.ingredients, createIngredientDraft()],
   });
 
   const updateServingSource = (
@@ -292,7 +299,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
       await upsertPrepRecipe(payload);
       setEditingRecipeId(null);
       setIsAddingRecipe(false);
-      setNewRecipeDraft(emptyRecipeDraft);
+      setNewRecipeDraft(createEmptyRecipeDraft());
       onToast(language === "th" ? "บันทึกสูตรแล้ว" : "Recipe saved.", "success");
     } catch (error) {
       if (error instanceof Error) {
@@ -419,7 +426,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
           </p>
         </div>
         {draft.ingredients.map((ingredient, index) => (
-          <div key={`${index}-${ingredient.name}`} className="border-t border-slate-200 pt-3 first:border-t-0 first:pt-0">
+          <div key={ingredient.id} className="border-t border-slate-200 pt-3 first:border-t-0 first:pt-0">
             <div className="grid gap-2 md:grid-cols-[1.5fr_1fr_1fr_1fr_auto] md:items-end">
               <Input
                 label={language === "th" ? "ชื่อวัตถุดิบ" : "Ingredient"}
@@ -549,7 +556,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
               () => void handleSaveRecipe(toRecipeId(newRecipeDraft.target), newRecipeDraft),
               () => {
                 setIsAddingRecipe(false);
-                setNewRecipeDraft(emptyRecipeDraft);
+                setNewRecipeDraft(createEmptyRecipeDraft());
               },
               language === "th" ? "บันทึกสูตรใหม่" : "Save new recipe",
               savingRecipeId !== null,
