@@ -240,6 +240,48 @@ function OrderDetailExpand({
   );
 }
 
+interface RouteStopPreview {
+  orderRef: string;
+  label: string;
+  hasPin: boolean;
+}
+
+function RouteStopRow({
+  stop,
+  stopNumber,
+  language,
+}: {
+  stop: RouteStopPreview;
+  stopNumber: number;
+  language: Language;
+}): JSX.Element {
+  return (
+    <li className="flex gap-3 rounded-lg border border-brand-gold/25 bg-white p-3 shadow-sm">
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-red text-sm font-bold text-white"
+        aria-hidden
+      >
+        {stopNumber}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-bold text-brand-redDark">{stop.orderRef}</span>
+          {stop.hasPin ? (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+              {language === "th" ? "มีหมุด GPS" : "GPS pin"}
+            </span>
+          ) : (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+              {language === "th" ? "ที่อยู่เท่านั้น" : "Address only"}
+            </span>
+          )}
+        </div>
+        <p className="mt-1.5 text-sm leading-snug text-slate-700">{stop.label}</p>
+      </div>
+    </li>
+  );
+}
+
 function getNextActionLabel(status: OrderStatus, language: Language): string | null {
   if (status === "new") {
     return language === "th" ? "ยืนยัน" : "Confirm";
@@ -272,6 +314,7 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
   const [savingCustomerOrderId, setSavingCustomerOrderId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [editingCustomerOrderId, setEditingCustomerOrderId] = useState<string | null>(null);
+  const [isRouteToolsOpen, setIsRouteToolsOpen] = useState(false);
 
   useEffect(() => {
     if (!focusOrderId || handledFocusOrderIdRef.current === focusOrderId) {
@@ -610,44 +653,68 @@ export function OrdersPanel({ orders, t, language, settings, onToast }: OrdersPa
         </div>
       </div>
 
-      <details className="mb-3 rounded-lg border border-brand-gold/30 bg-white/70 p-3">
-        <summary className="cursor-pointer list-none text-sm font-semibold text-brand-redDark">
-          {language === "th" ? "เครื่องมือเส้นทางและการเก็บออเดอร์" : "Route and archive tools"}
-        </summary>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center">
-        <Button size="compact" onClick={openRouteInMaps}>
-          {t.openRouteInMaps}
-        </Button>
-        <Button size="compact" variant="secondary" onClick={() => void handleArchiveOrders(["cancelled"])}>
-          {t.clearCancelledOrders}
-        </Button>
-        <Button size="compact" variant="secondary" onClick={() => void handleArchiveOrders(["completed"])}>
-          {t.clearFulfilledOrders}
-        </Button>
-        <Button size="compact" variant="danger" onClick={() => void handleClearAllOrders()}>
-          {language === "th" ? "ล้างทั้งหมด" : "Clear all"}
-        </Button>
-        </div>
-        <p className="mt-3 text-xs text-slate-600">{t.routeStopsLimitedNote}</p>
-        <div className="mt-3 rounded-lg border border-brand-gold/30 bg-white/80 p-3">
-          <p className="text-sm font-semibold text-brand-redDark">{t.routePreviewTitle}</p>
-          <p className="mt-1 text-xs text-slate-600">
-            {t.routePreviewOrigin}: {(dispatchCoords ?? dispatchAddress) || "-"}
-          </p>
-          <div className="mt-2 space-y-1 text-xs text-slate-700">
-          {routeStops.length === 0 ? (
-            <p>{t.routeNoOrdersForRoute}</p>
-          ) : (
-            routeStops.map((stop, index) => (
-              <p key={`${stop.orderRef}-${index}`}>
-                {t.routePreviewStop} {index + 1}: {stop.label} ({stop.orderRef}
-                {stop.hasPin ? ", pin" : ""})
-              </p>
-            ))
-          )}
+      <div className="mb-3 rounded-lg border border-brand-gold/30 bg-white/70 p-3">
+        <button
+          type="button"
+          aria-expanded={isRouteToolsOpen}
+          onClick={() => setIsRouteToolsOpen((open) => !open)}
+          className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-brand-gold/40 bg-brand-cream px-3 py-2.5 text-left text-sm font-semibold text-brand-redDark shadow-sm transition hover:bg-amber-100"
+        >
+          <span>{language === "th" ? "เครื่องมือเส้นทางและการเก็บออเดอร์" : "Route and archive tools"}</span>
+          <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-slate-600">
+            {routeStops.length > 0 ? (
+              <span className="rounded-full bg-brand-red/10 px-2 py-0.5 text-brand-redDark">
+                {language === "th" ? `${routeStops.length} จุดส่ง` : `${routeStops.length} stops`}
+              </span>
+            ) : null}
+            <span aria-hidden className="text-base leading-none">
+              {isRouteToolsOpen ? "▾" : "▸"}
+            </span>
+          </span>
+        </button>
+        {isRouteToolsOpen ? (
+          <div className="mt-3 space-y-3 border-t border-brand-gold/20 pt-3">
+            <Button fullWidth onClick={openRouteInMaps}>
+              {t.openRouteInMaps}
+            </Button>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Button size="compact" variant="secondary" fullWidth onClick={() => void handleArchiveOrders(["cancelled"])}>
+                {t.clearCancelledOrders}
+              </Button>
+              <Button size="compact" variant="secondary" fullWidth onClick={() => void handleArchiveOrders(["completed"])}>
+                {t.clearFulfilledOrders}
+              </Button>
+              <div className="sm:col-span-2">
+                <Button size="compact" variant="danger" fullWidth onClick={() => void handleClearAllOrders()}>
+                  {language === "th" ? "ล้างทั้งหมด" : "Clear all"}
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed text-slate-600">{t.routeStopsLimitedNote}</p>
+            <div className="rounded-lg border border-brand-gold/30 bg-brand-cream/40 p-3">
+              <p className="text-sm font-semibold text-brand-redDark">{t.routePreviewTitle}</p>
+              <div className="mt-2 rounded-md border border-brand-gold/20 bg-white px-2.5 py-2 text-xs text-slate-700">
+                <span className="font-semibold uppercase tracking-wide text-slate-500">{t.routePreviewOrigin}</span>
+                <p className="mt-0.5 break-all text-sm text-slate-800">{(dispatchCoords ?? dispatchAddress) || "-"}</p>
+              </div>
+              {routeStops.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-600">{t.routeNoOrdersForRoute}</p>
+              ) : (
+                <ol className="mt-3 list-none space-y-2">
+                  {routeStops.map((stop, index) => (
+                    <RouteStopRow
+                      key={`${stop.orderRef}-${index}`}
+                      stop={stop}
+                      stopNumber={index + 1}
+                      language={language}
+                    />
+                  ))}
+                </ol>
+              )}
+            </div>
           </div>
-        </div>
-      </details>
+        ) : null}
+      </div>
 
       <div className="space-y-2">
         {visibleOrders.map((order) => {
