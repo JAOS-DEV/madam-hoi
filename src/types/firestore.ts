@@ -90,6 +90,10 @@ export interface CustomerProfileDoc {
   phone: string;
   email?: string;
   defaultDeliveryLocation?: string;
+  defaultLocation?: {
+    lat: number;
+    lng: number;
+  } | null;
   notes?: string;
   lastOrderAt?: unknown;
   updatedAt?: unknown;

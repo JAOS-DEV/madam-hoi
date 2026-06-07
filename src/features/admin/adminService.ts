@@ -205,6 +205,7 @@ export async function updateCustomerProfile(
   patch: Pick<CustomerProfileDoc, "name" | "phone"> & {
     email?: string;
     defaultDeliveryLocation?: string;
+    defaultLocation?: { lat: number; lng: number } | null;
     notes?: string;
   },
 ): Promise<void> {
@@ -212,6 +213,26 @@ export async function updateCustomerProfile(
     ...sanitizeForFirestore(patch),
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function createCustomerProfile(
+  customer: Pick<CustomerProfileDoc, "name" | "phone"> & {
+    email?: string;
+    defaultDeliveryLocation?: string;
+    defaultLocation?: { lat: number; lng: number };
+    notes?: string;
+  },
+): Promise<void> {
+  const normalizedPhone = customer.phone.replace(/[^0-9]/g, "");
+  const customerId = `phone-${normalizedPhone || Date.now()}`;
+  await setDoc(
+    doc(db, "customers", customerId),
+    {
+      ...sanitizeForFirestore(customer),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 }
 
 export async function deleteCustomerProfile(customerId: string): Promise<void> {

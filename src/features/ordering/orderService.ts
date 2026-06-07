@@ -412,6 +412,7 @@ export async function submitOrder(input: SubmitOrderInput): Promise<SubmitOrderR
           phone: input.customer.phone,
           email: input.customer.email ?? null,
           defaultDeliveryLocation: input.customer.deliveryLocation,
+          defaultLocation: input.customer.location,
           notes: input.customer.notes ?? null,
           lastOrderAt: serverTimestamp(),
           updatedAt: serverTimestamp(),

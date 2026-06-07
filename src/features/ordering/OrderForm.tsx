@@ -428,6 +428,15 @@ export function OrderForm({
     form.setValue("email", selectedCustomer.email ?? "", { shouldDirty: true });
     form.setValue("deliveryLocation", selectedCustomer.defaultDeliveryLocation ?? "", { shouldDirty: true });
     form.setValue("notes", selectedCustomer.notes ?? "", { shouldDirty: true });
+    if (selectedCustomer.defaultLocation) {
+      skipAddressGeocodeRef.current = true;
+      lastGeocodedQueryRef.current = selectedCustomer.defaultDeliveryLocation?.trim() ?? "";
+      form.setValue("locationLat", selectedCustomer.defaultLocation.lat, { shouldDirty: true, shouldValidate: true });
+      form.setValue("locationLng", selectedCustomer.defaultLocation.lng, { shouldDirty: true, shouldValidate: true });
+    } else {
+      form.resetField("locationLat");
+      form.resetField("locationLng");
+    }
   }, [form, isAdminMode, selectedCustomer]);
 
   const selectedLat = form.watch("locationLat");
