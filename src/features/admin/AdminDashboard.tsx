@@ -15,6 +15,8 @@ import {
   subscribeCustomers,
   subscribeOrders,
 } from "../ordering/orderService";
+import type { OrderSchemaInput } from "../ordering/orderSchema";
+import { REGULAR_SPECIAL_KEY } from "../ordering/regularSpecial";
 import { BankDetailsPanel } from "./BankDetailsPanel";
 import { OrdersPanel } from "./OrdersPanel";
 import { SettingsPanel } from "./SettingsPanel";
@@ -34,6 +36,13 @@ interface AdminDashboardProps {
 }
 
 type DashboardSection = "today" | "orders" | "stock" | "setup";
+const ADMIN_ORDER_DRAFT_KEY = "madam-hoi.admin-order-draft";
+
+interface AdminOrderDraft {
+  quantities: OrderDoc["quantities"];
+  regularSpecialSlots?: boolean[];
+  values: Partial<OrderSchemaInput>;
+}
 
 function toDashboardSection(value: string | null): DashboardSection {
   if (value === "orders" || value === "stock" || value === "setup" || value === "today") {
@@ -66,6 +75,23 @@ function getNavItems(language: Language): Array<{ section: DashboardSection; lab
     { section: "stock", label: "Stock" },
     { section: "setup", label: "Setup" },
   ];
+}
+
+function buildRegularSpecialSlots(order: OrderDoc & { id: string }): boolean[] {
+  const regularQty = Math.max(0, Math.floor(order.quantities.regular ?? 0));
+  const specialRegularCount = Math.min(
+    regularQty,
+    Math.max(0, Math.floor(order.quantities[REGULAR_SPECIAL_KEY] ?? 0)),
+  );
+  return Array.from({ length: regularQty }, (_, index) => index < specialRegularCount);
+}
+
+function writeAdminOrderDraft(draft: AdminOrderDraft): void {
+  try {
+    window.sessionStorage.setItem(ADMIN_ORDER_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Ignore storage failures; the manual order form can still be filled normally.
+  }
 }
 
 export function AdminDashboard({
@@ -159,6 +185,37 @@ export function AdminDashboard({
     setSetupScrollTarget(null);
     setActiveSection("orders");
     setSearchParams({ section: "orders" }, { replace: true });
+    window.setTimeout(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    }, 80);
+  };
+
+  const handleQuickReorder = (order: OrderDoc & { id: string }, customer: CustomerProfileDoc): void => {
+    writeAdminOrderDraft({
+      quantities: order.quantities,
+      regularSpecialSlots: buildRegularSpecialSlots(order),
+      values: {
+        name: order.customer.name,
+        phone: order.customer.phone,
+        email: order.customer.email ?? "",
+        deliveryLocation: order.customer.deliveryLocation,
+        notes: order.customer.notes ?? "",
+        paymentMethod: order.paymentMethod,
+        customerId: customer.id,
+        orderSource: "admin_manual",
+        locationLat: order.customer.location?.lat,
+        locationLng: order.customer.location?.lng,
+      },
+    });
+    setSetupScrollTarget(null);
+    setActiveSection("orders");
+    setSearchParams({ section: "orders" }, { replace: true });
+    showToast(
+      language === "th"
+        ? "กรอกออเดอร์จากประวัติแล้ว กรุณาตรวจสอบก่อนยืนยัน"
+        : "Reorder draft loaded. Please review before confirming.",
+      "success",
+    );
     window.setTimeout(() => {
       window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
     }, 80);
@@ -299,7 +356,13 @@ export function AdminDashboard({
             showHeader={false}
             onToast={showToast}
           />
-          <CustomersPanel customers={customers} language={language} onToast={showToast} />
+          <CustomersPanel
+            customers={customers}
+            orders={orders}
+            language={language}
+            onToast={showToast}
+            onQuickReorder={handleQuickReorder}
+          />
           <SettingsPanel
             settings={settings}
             publicOrderingEnabled={publicOrderingEnabled}

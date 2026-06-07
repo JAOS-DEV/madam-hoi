@@ -5,16 +5,19 @@ import { Input } from "../../components/ui/Input";
 import { MapPinPicker } from "../../components/ui/MapPinPicker";
 import type { ToastTone } from "../../hooks/useToast";
 import { translations, type Language } from "../../i18n";
-import type { CustomerProfileDoc } from "../../types/firestore";
-import { formatDateTime } from "../../utils/dates";
+import type { CustomerProfileDoc, OrderDoc, OrderStatus } from "../../types/firestore";
+import { formatDateTime, toDateOrNull } from "../../utils/dates";
 import { parseOptionalNumber } from "../../utils/firestore";
 import { reverseGeocodeAddress } from "../../utils/geocoding";
+import { formatTHB } from "../../utils/money";
 import { createCustomerProfile, deleteCustomerProfile, updateCustomerProfile } from "./adminService";
 
 interface CustomersPanelProps {
   customers: CustomerProfileDoc[];
+  orders: Array<OrderDoc & { id: string }>;
   language: Language;
   onToast: (message: string, tone: ToastTone) => void;
+  onQuickReorder: (order: OrderDoc & { id: string }, customer: CustomerProfileDoc) => void;
 }
 
 interface CustomerDraft {
@@ -117,7 +120,58 @@ function getPinStatusText(draft: CustomerDraft, language: Language, isResolvingP
     : "Choose a pin on the map to save the default delivery spot.";
 }
 
-export function CustomersPanel({ customers, language, onToast }: CustomersPanelProps): JSX.Element {
+function normalizePhone(value: string): string {
+  return value.replace(/[^0-9]/g, "");
+}
+
+function isOrderForCustomer(customer: CustomerProfileDoc, order: OrderDoc & { id: string }): boolean {
+  if (order.customerId === customer.id) {
+    return true;
+  }
+  const customerPhone = normalizePhone(customer.phone);
+  const orderPhone = normalizePhone(order.customer.phone);
+  return customerPhone.length > 0 && customerPhone === orderPhone;
+}
+
+function getCustomerOrderHistory(
+  customer: CustomerProfileDoc,
+  orders: Array<OrderDoc & { id: string }>,
+): Array<OrderDoc & { id: string }> {
+  return orders
+    .filter((order) => isOrderForCustomer(customer, order))
+    .sort((left, right) => {
+      const leftTime = toDateOrNull(left.createdAt)?.getTime() ?? 0;
+      const rightTime = toDateOrNull(right.createdAt)?.getTime() ?? 0;
+      return rightTime - leftTime;
+    });
+}
+
+function getOrderItemSummary(order: OrderDoc & { id: string }, language: Language): string {
+  return order.itemSnapshot
+    .filter((item) => item.quantity > 0)
+    .map((item) => `${item.quantity} x ${language === "th" ? item.thaiLabel : item.label}`)
+    .join(", ");
+}
+
+function getStatusLabel(status: OrderStatus, language: Language): string {
+  const labels: Record<OrderStatus, string> = {
+    new: language === "th" ? "ใหม่" : "New",
+    confirmed: language === "th" ? "ยืนยันแล้ว" : "Confirmed",
+    preparing: language === "th" ? "กำลังเตรียม" : "Preparing",
+    out_for_delivery: language === "th" ? "กำลังจัดส่ง" : "Out for delivery",
+    completed: language === "th" ? "เสร็จสิ้น" : "Completed",
+    cancelled: language === "th" ? "ยกเลิก" : "Cancelled",
+  };
+  return labels[status];
+}
+
+export function CustomersPanel({
+  customers,
+  orders,
+  language,
+  onToast,
+  onQuickReorder,
+}: CustomersPanelProps): JSX.Element {
   const t = useMemo(() => translations[language], [language]);
   const [search, setSearch] = useState("");
   const [createDraft, setCreateDraft] = useState<CustomerDraft>(() =>
@@ -131,6 +185,7 @@ export function CustomersPanel({ customers, language, onToast }: CustomersPanelP
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [mapPinTarget, setMapPinTarget] = useState<MapPinTarget>(null);
   const [isResolvingPinAddress, setIsResolvingPinAddress] = useState(false);
+  const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(null);
 
   const visibleCustomers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -333,6 +388,12 @@ export function CustomersPanel({ customers, language, onToast }: CustomersPanelP
     mapPinTarget?.type === "new" ? createDraft : mapPinTarget ? editingById[mapPinTarget.customerId] : undefined;
   const mapInitialLocation = mapInitialDraft ? getDraftLocation(mapInitialDraft) : null;
   const createPinStatusText = getPinStatusText(createDraft, language, isResolvingPinAddress);
+  const historyCustomer = customers.find((customer) => customer.id === historyCustomerId) ?? null;
+  const historyOrders = useMemo(
+    () => (historyCustomer ? getCustomerOrderHistory(historyCustomer, orders) : []),
+    [historyCustomer, orders],
+  );
+  const historyTotal = historyOrders.reduce((sum, order) => sum + order.calculated.total, 0);
 
   return (
     <>
@@ -425,6 +486,7 @@ export function CustomersPanel({ customers, language, onToast }: CustomersPanelP
         <div className="space-y-3">
           {visibleCustomers.map((customer) => {
             const draft = editingById[customer.id];
+            const orderHistoryCount = orders.filter((order) => isOrderForCustomer(customer, order)).length;
             return (
               <article key={customer.id} className="rounded-lg border border-brand-gold/30 bg-white p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -460,6 +522,9 @@ export function CustomersPanel({ customers, language, onToast }: CustomersPanelP
                         {language === "th" ? "แก้ไข" : "Edit"}
                       </Button>
                     )}
+                    <Button size="compact" variant="secondary" onClick={() => setHistoryCustomerId(customer.id)}>
+                      {language === "th" ? "ประวัติ" : "History"} ({orderHistoryCount})
+                    </Button>
                     <Button
                       size="compact"
                       variant="danger"
@@ -551,6 +616,92 @@ export function CustomersPanel({ customers, language, onToast }: CustomersPanelP
         </div>
       </div>
       </Card>
+      {historyCustomer ? (
+        <div className="fixed inset-0 z-[1000] overflow-y-auto bg-black/40 p-3 sm:p-4">
+          <div className="mx-auto mt-2 w-full max-w-3xl rounded-xl border border-brand-gold/30 bg-white shadow-lg sm:mt-6">
+            <div className="sticky top-0 z-10 rounded-t-xl border-b border-brand-gold/30 bg-white p-3 sm:p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-brand-redDark sm:text-lg">
+                    {language === "th" ? "ประวัติออเดอร์" : "Order history"}: {historyCustomer.name}
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {historyCustomer.phone}
+                    {historyCustomer.defaultDeliveryLocation ? ` - ${historyCustomer.defaultDeliveryLocation}` : ""}
+                  </p>
+                </div>
+                <Button size="compact" variant="secondary" onClick={() => setHistoryCustomerId(null)}>
+                  {language === "th" ? "ปิด" : "Close"}
+                </Button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:flex sm:flex-wrap">
+                <span className="rounded-full bg-brand-cream px-3 py-1 font-semibold text-brand-redDark">
+                  {language === "th" ? "ออเดอร์" : "Orders"}: {historyOrders.length}
+                </span>
+                <span className="rounded-full bg-brand-cream px-3 py-1 font-semibold text-brand-redDark">
+                  {language === "th" ? "รวม" : "Total"}: {formatTHB(historyTotal)} THB
+                </span>
+              </div>
+            </div>
+            <div className="max-h-[70vh] space-y-3 overflow-y-auto p-3 sm:p-4">
+              {historyOrders.map((order) => (
+                <article key={order.id} className="rounded-lg border border-brand-gold/30 bg-brand-cream/30 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-brand-redDark">{order.orderRef}</p>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-700">
+                          {getStatusLabel(order.status, language)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600">{formatDateTime(order.createdAt)}</p>
+                      <p className="text-sm text-slate-700">
+                        {language === "th" ? "รายการ" : "Items"}: {getOrderItemSummary(order, language) || "-"}
+                      </p>
+                      <p className="text-sm text-slate-700">
+                        {language === "th" ? "ที่อยู่" : "Address"}: {order.customer.deliveryLocation}
+                      </p>
+                      {order.customer.notes ? (
+                        <p className="rounded-md border border-brand-gold/20 bg-white p-2 text-sm text-slate-700">
+                          {language === "th" ? "โน้ต" : "Note"}: {order.customer.notes}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 space-y-2 sm:w-44">
+                      <p className="text-left text-base font-bold text-brand-redDark sm:text-right">
+                        {formatTHB(order.calculated.total)} THB
+                      </p>
+                      <p className="text-left text-xs text-slate-600 sm:text-right">
+                        {order.paymentMethod === "bank_transfer" ? t.bankTransferOnDelivery : t.cashOnDelivery}
+                      </p>
+                      {order.orderSource ? (
+                        <p className="text-left text-xs text-slate-500 sm:text-right">
+                          {language === "th" ? "แหล่งที่มา" : "Source"}: {order.orderSource}
+                        </p>
+                      ) : null}
+                      <Button
+                        size="compact"
+                        fullWidth
+                        onClick={() => {
+                          onQuickReorder(order, historyCustomer);
+                          setHistoryCustomerId(null);
+                        }}
+                      >
+                        {language === "th" ? "สั่งซ้ำ" : "Quick reorder"}
+                      </Button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+              {historyOrders.length === 0 ? (
+                <p className="rounded-lg border border-brand-gold/30 bg-brand-cream/40 p-3 text-sm text-slate-600">
+                  {language === "th" ? "ยังไม่มีประวัติออเดอร์" : "No order history yet."}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <MapPinPicker
         isOpen={mapPinTarget !== null}
         title={language === "th" ? "เลือกหมุดลูกค้า" : "Choose customer pin"}
