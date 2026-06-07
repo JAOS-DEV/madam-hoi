@@ -10,7 +10,19 @@ import { subscribePrepRecipes } from "../ordering/orderService";
 import { getPackagingStock } from "../ordering/stockUtils";
 import { updateOrderingStatus } from "./adminService";
 import { getAdminErrorMessage } from "./adminToastErrors";
-import { calculateShoppingList } from "./shoppingList";
+import {
+  calculateShoppingList,
+  formatShoppingListQuantity,
+  getShoppingListDetail,
+  getShoppingListLabel,
+  getShoppingOrderCount,
+  getShoppingOrdersForScope,
+  getShoppingScopeDescription,
+  getTodayShoppingOrders,
+  readShoppingListScope,
+  writeShoppingListScope,
+  type ShoppingListScope,
+} from "./shoppingList";
 
 interface TodayPanelProps {
   language: Language;
@@ -46,15 +58,6 @@ function getDeliveryMessage(settings: MainSettingsDoc, language: Language): stri
   return language === "th"
     ? `${deliveryMessage.startTime ?? "-"}-${deliveryMessage.endTime ?? "-"}`
     : `${deliveryMessage.startTime ?? "-"}-${deliveryMessage.endTime ?? "-"}`;
-}
-
-function getTodayOrders(orders: Array<OrderDoc & { id: string }>): Array<OrderDoc & { id: string }> {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  return orders.filter((order) => {
-    const createdAt = toDateOrNull(order.createdAt);
-    return createdAt !== null && createdAt >= start && order.archivedAt === undefined;
-  });
 }
 
 function getItemSummary(order: OrderDoc & { id: string }, language: Language): string {
@@ -142,8 +145,9 @@ export function TodayPanel({
 }: TodayPanelProps): JSX.Element {
   const [orderingAction, setOrderingAction] = useState<"open" | "close" | null>(null);
   const [recipes, setRecipes] = useState<PrepRecipeDoc[]>([]);
+  const [shoppingListScope, setShoppingListScope] = useState<ShoppingListScope>(readShoppingListScope);
   const packagingStock = getPackagingStock(stock);
-  const todayOrders = useMemo(() => getTodayOrders(orders), [orders]);
+  const todayOrders = useMemo(() => getTodayShoppingOrders(orders), [orders]);
   const validTodayOrders = useMemo(
     () => todayOrders.filter((order) => order.status !== "cancelled"),
     [todayOrders],
@@ -170,8 +174,20 @@ export function TodayPanel({
     smallProduct && smallProduct.deductionGrams > 0
       ? Math.floor(stock.availableHoiGrams / smallProduct.deductionGrams)
       : 0;
-  const shoppingList = useMemo(() => calculateShoppingList(todayOrders, recipes), [recipes, todayOrders]);
+  const shoppingListOrders = useMemo(
+    () => getShoppingOrdersForScope(orders, shoppingListScope),
+    [orders, shoppingListScope],
+  );
+  const shoppingList = useMemo(
+    () => calculateShoppingList(shoppingListOrders, recipes),
+    [recipes, shoppingListOrders],
+  );
+  const shoppingOrderCount = getShoppingOrderCount(shoppingListOrders);
   const hoiAvailableKg = stock.availableHoiGrams / 1000;
+
+  useEffect(() => {
+    writeShoppingListScope(shoppingListScope);
+  }, [shoppingListScope]);
 
   useEffect(() => {
     const unsubscribe = subscribePrepRecipes(setRecipes, (error) => {
@@ -201,25 +217,59 @@ export function TodayPanel({
       ? `ออเดอร์ที่ต้องดู (${activeOrders.length})`
       : `Orders needing attention (${activeOrders.length})`;
 
+  const shoppingScopeDescription = getShoppingScopeDescription(
+    shoppingListScope,
+    shoppingOrderCount,
+    language,
+  );
+
   const prepShoppingListCard = (
     <Card title={prepTitle}>
+      <div className="mb-3 space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            size="compact"
+            variant={shoppingListScope === "today" ? "primary" : "secondary"}
+            fullWidth
+            onClick={() => setShoppingListScope("today")}
+          >
+            {language === "th" ? "วันนี้" : "Today"}
+          </Button>
+          <Button
+            size="compact"
+            variant={shoppingListScope === "open" ? "primary" : "secondary"}
+            fullWidth
+            onClick={() => setShoppingListScope("open")}
+          >
+            {language === "th" ? "ออเดอร์ค้าง" : "Open orders"}
+          </Button>
+        </div>
+        <p className="text-xs text-slate-600">{shoppingScopeDescription}</p>
+      </div>
       <div className="space-y-2">
         {shoppingList.map((item) => (
           <div
-            key={`${item.ingredient}-${item.unit}`}
+            key={`${item.kind ?? "recipe"}-${item.ingredient}-${item.unit}`}
             className="flex justify-between gap-3 rounded-lg border border-brand-gold/30 bg-white p-2 text-sm"
           >
-            <span className="font-medium text-brand-redDark">{item.ingredient}</span>
-            <span className="text-slate-700">
-              {item.quantity.toFixed(2)} {item.unit}
+            <div className="min-w-0">
+              <span className="font-medium text-brand-redDark">{getShoppingListLabel(item, language)}</span>
+              <p className="text-xs text-slate-500">{getShoppingListDetail(item, language)}</p>
+            </div>
+            <span className="shrink-0 text-slate-700">
+              {formatShoppingListQuantity(item)} {item.unit}
             </span>
           </div>
         ))}
         {shoppingList.length === 0 ? (
           <p className="text-sm text-slate-500">
-            {language === "th"
-              ? "ยังไม่มีรายการซื้อจากออเดอร์วันนี้"
-              : "No prep shopping list from today's orders yet."}
+            {shoppingListScope === "today"
+              ? language === "th"
+                ? "ยังไม่มีรายการซื้อจากออเดอร์วันนี้"
+                : "No prep shopping list from today's orders yet."
+              : language === "th"
+                ? "ยังไม่มีออเดอร์ค้างที่ต้องเตรียมของ"
+                : "No open orders need prep yet."}
           </p>
         ) : null}
       </div>

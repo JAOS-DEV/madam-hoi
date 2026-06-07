@@ -8,7 +8,18 @@ import type { Language } from "../../i18n";
 import type { OrderDoc, PrepRecipeDoc, ProductDoc, RecipeServingSourceConfig } from "../../types/firestore";
 import { subscribePrepRecipes } from "../ordering/orderService";
 import { deletePrepRecipe, seedDefaultPrepRecipes, upsertPrepRecipe } from "./adminService";
-import { calculateShoppingList } from "./shoppingList";
+import {
+  calculateShoppingList,
+  formatShoppingListQuantity,
+  getShoppingListDetail,
+  getShoppingListLabel,
+  getShoppingOrderCount,
+  getShoppingOrdersForScope,
+  getShoppingScopeDescription,
+  readShoppingListScope,
+  writeShoppingListScope,
+  type ShoppingListScope,
+} from "./shoppingList";
 
 interface ShoppingPrepPanelProps {
   language: Language;
@@ -108,10 +119,6 @@ function toRecipeId(target: string): string {
   return slug || `recipe-${Date.now()}`;
 }
 
-function formatQuantity(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
-}
-
 function getRecipeSummary(recipe: PrepRecipeDoc, products: ProductDoc[], language: Language): string {
   const sources = legacySourceToSources(recipe).map((source) => {
     if (source.type === "orders_count") {
@@ -141,6 +148,7 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
   const [newRecipeDraft, setNewRecipeDraft] = useState<RecipeDraft>(createEmptyRecipeDraft);
   const [savingRecipeId, setSavingRecipeId] = useState<string | null>(null);
   const [deletingRecipeId, setDeletingRecipeId] = useState<string | null>(null);
+  const [shoppingListScope, setShoppingListScope] = useState<ShoppingListScope>(readShoppingListScope);
 
   useEffect(() => {
     const unsub = subscribePrepRecipes(
@@ -169,14 +177,24 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
     };
   }, [editingRecipeId, onToast]);
 
+  const shoppingListOrders = useMemo(
+    () => getShoppingOrdersForScope(orders, shoppingListScope),
+    [orders, shoppingListScope],
+  );
   const shoppingList = useMemo(
-    () => calculateShoppingList(orders.filter((order) => order.archivedAt === undefined), recipes),
-    [orders, recipes],
+    () => calculateShoppingList(shoppingListOrders, recipes),
+    [recipes, shoppingListOrders],
+  );
+  const shoppingOrderCount = getShoppingOrderCount(shoppingListOrders);
+  const shoppingScopeDescription = getShoppingScopeDescription(
+    shoppingListScope,
+    shoppingOrderCount,
+    language,
   );
 
-  const activeOrdersCount = orders.filter(
-    (order) => order.archivedAt === undefined && order.status !== "cancelled",
-  ).length;
+  useEffect(() => {
+    writeShoppingListScope(shoppingListScope);
+  }, [shoppingListScope]);
 
   const handleSeedRecipes = async (): Promise<void> => {
     try {
@@ -571,37 +589,61 @@ export function ShoppingPrepPanel({ language, orders, products, onToast }: Shopp
   return (
     <div className="space-y-4">
       <Card
-        title={language === "th" ? "Shopping list จากออเดอร์" : "Shopping list from orders"}
+        title={language === "th" ? "รายการซื้อจากออเดอร์" : "Shopping list from orders"}
         collapsible
         collapseStorageKey="admin.section.shopping-list"
       >
-        <p className="mb-3 text-xs text-slate-600">
-          {language === "th"
-            ? `คำนวณจากออเดอร์ที่ยังใช้งานอยู่ ${activeOrdersCount} รายการ ไม่รวมออเดอร์ที่ยกเลิก`
-            : `Calculated from ${activeOrdersCount} active orders. Cancelled orders are excluded.`}
-        </p>
+        <div className="mb-3 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              size="compact"
+              variant={shoppingListScope === "today" ? "primary" : "secondary"}
+              fullWidth
+              onClick={() => setShoppingListScope("today")}
+            >
+              {language === "th" ? "วันนี้" : "Today"}
+            </Button>
+            <Button
+              size="compact"
+              variant={shoppingListScope === "open" ? "primary" : "secondary"}
+              fullWidth
+              onClick={() => setShoppingListScope("open")}
+            >
+              {language === "th" ? "ออเดอร์ค้าง" : "Open orders"}
+            </Button>
+          </div>
+          <p className="text-xs text-slate-600">{shoppingScopeDescription}</p>
+        </div>
         {shoppingList.length === 0 ? (
           <div className="rounded-lg border border-brand-gold/30 bg-brand-cream/40 p-3">
             <p className="text-sm font-medium text-brand-redDark">
               {language === "th" ? "ยังไม่มีรายการเตรียมของ" : "No prep needed yet."}
             </p>
             <p className="mt-1 text-xs text-slate-600">
-              {language === "th"
-                ? "รายการซื้อจะแสดงเมื่อมีออเดอร์และมีสูตรวัตถุดิบแล้ว"
-                : "Shopping requirements will appear when orders and recipes are configured."}
+              {shoppingListScope === "today"
+                ? language === "th"
+                  ? "รายการซื้อจะแสดงเมื่อมีออเดอร์วันนี้และมีสูตรวัตถุดิบแล้ว"
+                  : "Shopping requirements will appear when there are today's orders and prep recipes are configured."
+                : language === "th"
+                  ? "รายการซื้อจะแสดงเมื่อมีออเดอร์ค้างและมีสูตรวัตถุดิบแล้ว"
+                  : "Shopping requirements will appear when there are open orders and prep recipes are configured."}
             </p>
           </div>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {shoppingList.map((item) => (
-              <article key={`${item.ingredient}-${item.unit}`} className="rounded-lg border border-brand-gold/30 bg-white p-3">
+              <article
+                key={`${item.kind ?? "recipe"}-${item.ingredient}-${item.unit}`}
+                className="rounded-lg border border-brand-gold/30 bg-white p-3"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-brand-redDark">{item.ingredient}</p>
-                    <p className="mt-1 text-xs text-slate-500">{item.targets.join(", ")}</p>
+                    <p className="font-semibold text-brand-redDark">{getShoppingListLabel(item, language)}</p>
+                    <p className="mt-1 text-xs text-slate-500">{getShoppingListDetail(item, language)}</p>
                   </div>
                   <p className="shrink-0 text-lg font-bold text-emerald-700">
-                    {formatQuantity(item.quantity)} <span className="text-xs font-medium text-slate-500">{item.unit}</span>
+                    {formatShoppingListQuantity(item)}{" "}
+                    <span className="text-xs font-medium text-slate-500">{item.unit}</span>
                   </p>
                 </div>
               </article>
