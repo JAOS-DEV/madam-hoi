@@ -64,6 +64,19 @@ interface AdminOrderDraft {
 const createEmptyQuantities = (products: ProductDoc[]): OrderQuantities =>
   Object.fromEntries(products.map((product) => [product.id, 0]));
 const ADMIN_ORDER_DRAFT_KEY = "madam-hoi.admin-order-draft";
+const CUSTOMER_QUICK_FILL_LABEL_MAX_LENGTH = 52;
+
+function truncateCustomerLabel(value: string): string {
+  if (value.length <= CUSTOMER_QUICK_FILL_LABEL_MAX_LENGTH) {
+    return value;
+  }
+  return `${value.slice(0, CUSTOMER_QUICK_FILL_LABEL_MAX_LENGTH - 1).trim()}...`;
+}
+
+function getCustomerQuickFillLabel(customer: CustomerProfileDoc, language: Language): string {
+  const deliveryLocation = customer.defaultDeliveryLocation?.trim() || (language === "th" ? "ไม่มีที่อยู่" : "No address");
+  return truncateCustomerLabel(`${customer.name} (${deliveryLocation})`);
+}
 
 function readAdminOrderDraft(): AdminOrderDraft | null {
   try {
@@ -589,7 +602,7 @@ export function OrderForm({
                   { value: "", label: language === "th" ? "เลือกจากประวัติลูกค้า" : "Select saved customer" },
                   ...customers.map((customer) => ({
                     value: customer.id,
-                    label: `${customer.name} (${customer.phone})`,
+                    label: getCustomerQuickFillLabel(customer, language),
                   })),
                 ]}
                 {...form.register("customerId")}
